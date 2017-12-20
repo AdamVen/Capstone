@@ -1,0 +1,6 @@
+# The purpose of this program is to gain experience with Python/Git in anticipation of the upcoming capstone project
+
+animals = ["cat", "dog", "hamster", "wolf"]
+
+print("%s dfffsf" % animals[0:3:2])
+
