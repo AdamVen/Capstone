@@ -2,5 +2,5 @@
 
 animals = ["cat", "dog", "hamster", "wolf"]
 
-print("%s dfffsf" % animals[0:3:2])
+print("%s" % animals[0:3:2])
 
