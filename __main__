@@ -4,3 +4,11 @@ animals = ["cat", "dog", "hamster", "wolf"]
 
 print("%s" % animals[0:3:2])
 
+from picamera import PiCamera
+from time import sleep
+
+camera = PiCamera()
+
+camera.start_preview()
+sleep(10)
+camera.stop_preview()
