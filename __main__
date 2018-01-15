@@ -1,14 +1,33 @@
-# The purpose of this program is to gain experience with Python/Git in anticipation of the upcoming capstone project
-
-animals = ["cat", "dog", "hamster", "wolf"]
-
-print("%s" % animals[0:3:2])
+# The purpose of this program is to stream video in real-time with a dynamic text overlay
 
 from picamera import PiCamera
 from time import sleep
+import datetime as dt
+
+current = [4, 5, 3, 5, 7, 5, 2, 3, 1, 3]
+speed = [4, 12, 4, 3, 2, 1, 1, 4, 5, 6]
+distance = [12, 15, 30, 33, 22, 11, 34, 55, 94, 11]
+
 
 camera = PiCamera()
 
 camera.start_preview()
-sleep(10)
+camera.framerate = 24
+camera.resolution = (1280, 720)
+camera.start_recording('/home/pi/video.h264')
+
+start = dt.datetime.now()
+
+while (dt.datetime.now() - start).seconds < 10:
+    str1 = "current is "
+    str2 = str(current[0])
+    str3 = str1 + str2
+    i = (dt.datetime.now() - start).seconds
+    camera.annotate_text = (str3)
+
+
+
+camera.wait_recording(10)
+camera.stop_recording()
 camera.stop_preview()
+camera.close()
