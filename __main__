@@ -1,33 +1,58 @@
-# The purpose of this program is to stream video in real-time with a dynamic text overlay
+# The purpose of this program is to stream video with a dynamic text overlay simulating welding parameters
+# that will later be obtained from an instrumentation module.
 
-from picamera import PiCamera
+# RPi peripherals imports
+import picamera
+
+# Time/Sleep imports
 from time import sleep
 import datetime as dt
 
+# Networking imports
+import socket
+import subprocess
+
+# Excel imports
+import openpyxl
+
+# Table imports
+import astropy.table import Table, Column
+import numpy as np
+
+wb = openpyxl.load_workbook('/home/pi/Downloads/WeldingParameters.xlsx')
+ws = wb["MIG"]
+
+for r in range(5, 38):
+    for c in range(4, 15):
+        cellStr = ws.cell(row = r, column = c)
+        currentTable =
+
+# Simulated welding parameters
 current = [4, 5, 3, 5, 7, 5, 2, 3, 1, 3]
 speed = [4, 12, 4, 3, 2, 1, 1, 4, 5, 6]
 distance = [12, 15, 30, 33, 22, 11, 34, 55, 94, 11]
 
+print('waiting for connection')
 
-camera = PiCamera()
+with picamera.PiCamera() as camera:
+    camera.resolution = (1280, 720)
+    camera.framerate = 24
 
-camera.start_preview()
-camera.framerate = 24
-camera.resolution = (1280, 720)
-camera.start_recording('/home/pi/video.h264')
+    server_socket = socket.socket()
+    server_socket.bind(('0.0.0.0', 8000))
+    server_socket.listen(0)
 
-start = dt.datetime.now()
-
-while (dt.datetime.now() - start).seconds < 10:
-    str1 = "current is "
-    str2 = str(current[0])
-    str3 = str1 + str2
-    i = (dt.datetime.now() - start).seconds
-    camera.annotate_text = (str3)
-
-
-
-camera.wait_recording(10)
-camera.stop_recording()
-camera.stop_preview()
-camera.close()
+    # Accept a single connection and make a file-like object out of it
+    connection = server_socket.accept()[0].makefile('wb')
+    print('initial connection made')
+    try:
+        print('stream starting')
+        camera.start_recording(connection, format='h264')
+        str1 = "I = 5A D = 3cm V = 5cm/s"
+        camera.annotate_text = (str1)
+        camera.wait_recording(600)
+        camera.stop_recording()
+    finally:
+        connection.close()
+        server_socket.close()
+        print('stream ending')
