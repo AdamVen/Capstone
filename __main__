@@ -15,17 +15,13 @@ import subprocess
 # Excel imports
 import openpyxl
 
-# Table imports
-from astropy.table import Table, Column
-import numpy as np
+# Read USB data
+import serial
+import time
 
 # Open up welding parameter data worksheet
 wb = openpyxl.load_workbook('/home/pi/Downloads/WeldingParameters.xlsx')
 ws = wb["MIG"]
-
-# Initialize table
-t = Table(names = ('Material', 'Thickness (mm)', 'Transfer Type', 'Current Low (A)', 'Current High (A)', 'Shielding Gas',
-    'Voltage Range (V)', 'Thin Wire (mm)', 'Thin WFS (ipm)', 'Thick Wire (mm)', 'Thick WFS (ipm)', 'ID'))
 
 # Constants
 CONST_START_ROW = 5
@@ -33,21 +29,65 @@ CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 
-# Create 2D Array
+# Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
 h = CONST_END_ROW - CONST_START_ROW + 1
-weldingParameters = [['-1' for x in range(w)] for y in range(h)]
+weldingParameters = [['-1' for x in range(w)] for y in range(h)] # weldingParameters[r][c]
 
+# Welding Parameters
+distance = 0
+current = 0
+angle = 0
+acceleration = [['-1' for x in range(3)] for y in range(2)] # [X1 Y1 Z1; X2 Y2 Z2]
+
+# Parameter defines for Table Look-up
+metal = ['0', '1']
+metalIndex = 0
+transfer = ['0', '1']
+transferIndex = 0
+thickness = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10']
+thicknessIndex = 4
+
+# Set-up USB
+ser = serial.Serial('/dev/ttyUSB0', 9600)
+s = []
+i = 0
+
+# Load data from excel sheet
 for r in range(CONST_START_ROW, CONST_END_ROW + 1):
     for c in range(CONST_START_COLUMN, CONST_END_COLUMN + 1):
         cellStr = ws.cell(row = r, column = c)
         weldingParameters[r - CONST_START_ROW][c - CONST_START_COLUMN] = cellStr.value
-        #print('r = ' + str(r) + ' c = ' + str(c))
 
+# Extract ID Column
+idCol = [item[11] for item in weldingParameters]
 
+# Simulate entered ID
+id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
 
-print(weldingParameters[4][11])
+# Get table index from id
+tableIndex = idCol.index(id)
 
+# Load welding parameter information from table
+currentLow = weldingParameters[tableIndex][3]
+currentHigh = weldingParameters[tableIndex][4]
+shieldingGas = weldingParameters[tableIndex][5]
+voltageRange = weldingParameters[tableIndex][6]
+thinWireSize = weldingParameters[tableIndex][7]
+thinWFS = weldingParameters[tableIndex][8]
+thickWireSize = weldingParameters[tableIndex][9]
+thickWFS = weldingParameters[tableIndex][10]
+
+# Additional welding parameter information
+distLow = 6.35
+distHigh = 12.7
+angleLow= [75, 40, 60]
+angleHigh = [105, 50, 70]
+angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
+
+# To-Do
+# Horizontal Weld: Drop angles by 0 to 15 degrees
+# Vertical Weld: Drop current by 10%
 
 # Commence stream
 print('waiting for connection')
@@ -57,7 +97,12 @@ with picamera.PiCamera() as camera:
     camera.framerate = 24
 
     server_socket = socket.socket()
-    server_socket.bind(('0.0.0.0', 8000))
+    try:
+        server_socket.bind(('0.0.0.0', 8000))
+    except valueError:
+        server_socket.close(('0.0.0.0', 8000))
+        server_socket.bind(('0.0.0.0', 8000))
+
     server_socket.listen(0)
 
     # Accept a single connection and make a file-like object out of it
@@ -66,9 +111,30 @@ with picamera.PiCamera() as camera:
     try:
         print('stream starting')
         camera.start_recording(connection, format='h264')
-        str1 = "I = 5A D = 3cm V = 5cm/s"
-        camera.annotate_text = (str1)
-        camera.wait_recording(600)
+
+        timeout = time.time() + 30
+
+        while time.time() < timeout:
+            time.sleep(.1)
+
+            currentStr = str(currentLow) + ' < ' + str(current) + ' < ' + str(currentHigh) + '\n'
+            distanceStr = str(distLow) + ' < ' + str(distance) + ' < ' + str(distHigh) + '\n'
+            angleStr = str(angleLow[0]) + ' < ' + str(angle) + ' < ' + str(angleHigh[0]) + '\n'
+            outStr = currentStr + distanceStr + angleStr
+
+            while (i < 4):
+                data = float(ser.readline())
+                s.append(data)
+                i = i + 1
+
+            distance = s[3]
+            s = []
+            i = 0
+
+            camera.annotate_text = outStr
+
+        #camera.wait_recording(20)
+
         camera.stop_recording()
     finally:
         connection.close()
