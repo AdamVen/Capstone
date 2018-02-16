@@ -27,17 +27,29 @@ ws = wb["MIG"]
 t = Table(names = ('Material', 'Thickness (mm)', 'Transfer Type', 'Current Low (A)', 'Current High (A)', 'Shielding Gas',
     'Voltage Range (V)', 'Thin Wire (mm)', 'Thin WFS (ipm)', 'Thick Wire (mm)', 'Thick WFS (ipm)', 'ID'))
 
+# Constants
+CONST_START_ROW = 5
+CONST_END_ROW = 48
+CONST_START_COLUMN = 4
+CONST_END_COLUMN = 15
 
+# Create 2D Array
+w = CONST_END_ROW - CONST_START_ROW + 1
+h = CONST_END_ROW - CONST_START_ROW + 1
+weldingParameters = [['-1' for x in range(w)] for y in range(h)]
 
-for r in range(5, 38):
-    for c in range(4, 15):
+for r in range(CONST_START_ROW, CONST_END_ROW + 1):
+    for c in range(CONST_START_COLUMN, CONST_END_COLUMN + 1):
         cellStr = ws.cell(row = r, column = c)
-        #currentTable =
+        weldingParameters[r - CONST_START_ROW][c - CONST_START_COLUMN] = cellStr.value
+        #print('r = ' + str(r) + ' c = ' + str(c))
 
 
 
+print(weldingParameters[4][11])
 
-#
+
+# Commence stream
 print('waiting for connection')
 
 with picamera.PiCamera() as camera:
@@ -49,7 +61,7 @@ with picamera.PiCamera() as camera:
     server_socket.listen(0)
 
     # Accept a single connection and make a file-like object out of it
-    connection = server_socket.accept()[0].makefile('w')
+    connection = server_socket.accept()[0].makefile('wb')
     print('initial connection made')
     try:
         print('stream starting')
