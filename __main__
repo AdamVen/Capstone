@@ -39,6 +39,8 @@ distance = 0
 current = 0
 angle = 0
 acceleration = [['-1' for x in range(3)] for y in range(2)] # [X1 Y1 Z1; X2 Y2 Z2]
+speed = 0
+currentDispX =  0
 
 # Parameter defines for Table Look-up
 metal = ['0', '1']
@@ -95,15 +97,19 @@ print('waiting for connection')
 with picamera.PiCamera() as camera:
     camera.resolution = (1280, 720)
     camera.framerate = 24
+    camera.annotate_text_size = 16
 
     server_socket = socket.socket()
     try:
         server_socket.bind(('0.0.0.0', 8000))
-    except valueError:
-        server_socket.close(('0.0.0.0', 8000))
-        server_socket.bind(('0.0.0.0', 8000))
+        print('8000 used')
+    except:
+        server_socket.bind(('0.0.0.0', 8001))
+        print('8001 used')
 
     server_socket.listen(0)
+
+    currentTime = time.time()
 
     # Accept a single connection and make a file-like object out of it
     connection = server_socket.accept()[0].makefile('wb')
@@ -112,29 +118,39 @@ with picamera.PiCamera() as camera:
         print('stream starting')
         camera.start_recording(connection, format='h264')
 
-        timeout = time.time() + 30
+        timeout = time.time() + 20
 
         while time.time() < timeout:
-            time.sleep(.1)
-
-            currentStr = str(currentLow) + ' < ' + str(current) + ' < ' + str(currentHigh) + '\n'
-            distanceStr = str(distLow) + ' < ' + str(distance) + ' < ' + str(distHigh) + '\n'
-            angleStr = str(angleLow[0]) + ' < ' + str(angle) + ' < ' + str(angleHigh[0]) + '\n'
-            outStr = currentStr + distanceStr + angleStr
 
             while (i < 4):
                 data = float(ser.readline())
                 s.append(data)
                 i = i + 1
 
+            prevTime = currentTime
+            currentTime = time.time()
+
+            dT = currentTime - prevTime
+
+            prevDispX = currentDispX
+            currentDispX =  s[0]
+
+            dX = currentDispX - prevDispX
+
+            speed = dX / dT
+
             distance = s[3]
             s = []
             i = 0
 
+            currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current) + ' < ' + str(currentHigh) + '\n'
+            distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance) + ' < ' + str(distHigh) + '\n'
+            angleStr = 'Angle: ' + str(angleLow[0]) + ' < ' + str(angle) + ' < ' + str(angleHigh[0]) + '\n'
+            #speedStr = 'Speed: ' + str(speed) + ' dX: ' + str(dX) + ' dT: ' + str(dT)
+            speedStr = 'Speed: ' + str(speed)
+            outStr = currentStr + distanceStr + angleStr + speedStr
+
             camera.annotate_text = outStr
-
-        #camera.wait_recording(20)
-
         camera.stop_recording()
     finally:
         connection.close()
