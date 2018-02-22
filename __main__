@@ -51,7 +51,7 @@ thickness = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10']
 thicknessIndex = 4
 
 # Set-up USB
-ser = serial.Serial('/dev/ttyUSB0', 9600)
+ser = serial.Serial('/dev/ttyUSB0', 19200)
 s = []
 i = 0
 
@@ -118,36 +118,43 @@ with picamera.PiCamera() as camera:
         print('stream starting')
         camera.start_recording(connection, format='h264')
 
-        timeout = time.time() + 20
+        timeout = time.time() + 600
 
         while time.time() < timeout:
 
-            while (i < 4):
-                data = float(ser.readline())
-                s.append(data)
-                i = i + 1
+            data = str(ser.readline())
 
-            prevTime = currentTime
-            currentTime = time.time()
+            param, measurement = data.split(":")
+            measurementValue = measurement.split("\\", 1)[0]
 
-            dT = currentTime - prevTime
+            if "A" in param:
+                angle = measurementValue
 
-            prevDispX = currentDispX
-            currentDispX =  s[0]
+            if "D" in param:
+                distance = measurementValue
 
-            dX = currentDispX - prevDispX
+            if "LR" in param:
+                prevDispX = currentDispX
+                currentDispX =  float(measurementValue)
+                prevTime = currentTime
+                currentTime = time.time()
+                dT = currentTime - prevTime
+                dX = currentDispX - prevDispX
+                speed = dX / dT
 
-            speed = dX / dT
+            if float(angle) > 75:
+                i = 0
+            elif float(angle) < 55:
+                i = 2
+            else:
+                i = 1
 
-            distance = s[3]
-            s = []
-            i = 0
 
             currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current) + ' < ' + str(currentHigh) + '\n'
             distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance) + ' < ' + str(distHigh) + '\n'
-            angleStr = 'Angle: ' + str(angleLow[0]) + ' < ' + str(angle) + ' < ' + str(angleHigh[0]) + '\n'
+            angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle) + ' < ' + str(angleHigh[i]) + '\n'
             #speedStr = 'Speed: ' + str(speed) + ' dX: ' + str(dX) + ' dT: ' + str(dT)
-            speedStr = 'Speed: ' + str(speed)
+            speedStr = 'Speed: ' + str(speed)[:5]
             outStr = currentStr + distanceStr + angleStr + speedStr
 
             camera.annotate_text = outStr
