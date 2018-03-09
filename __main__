@@ -16,6 +16,7 @@ import subprocess
 import openpyxl
 
 # Google Project Api Imports
+import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Create client to interact with Google Drive Api
@@ -26,7 +27,9 @@ client = gspread.authorize(creds)
 # Find workbook and open first sheet
 sheet = client.open("WeldingReadIn").sheet1
 
-sheet.update_cell(3, 3, "1")
+# Test sheet functonality
+sheet.update_cell(3, 3, "4")
+print(sheet.cell(4, 3).value)
 
 # Read USB data
 import serial
