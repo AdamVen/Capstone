@@ -15,6 +15,19 @@ import subprocess
 # Excel imports
 import openpyxl
 
+# Google Project Api Imports
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Create client to interact with Google Drive Api
+scope = ['https://spreadsheets.google.com/feeds']
+creds = ServiceAccountCredentials.from_json_keyfile_name('/home/pi/Downloads/client.json', scope)
+client = gspread.authorize(creds)
+
+# Find workbook and open first sheet
+sheet = client.open("WeldingReadIn").sheet1
+
+sheet.update_cell(3, 3, "1")
+
 # Read USB data
 import serial
 import time
