@@ -15,6 +15,9 @@ import subprocess
 # Excel imports
 import openpyxl
 
+# Enum import to facilitate looping through welding parameters
+from enum import Enum
+
 # Google Project Api Imports
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -26,7 +29,6 @@ client = gspread.authorize(creds)
 
 # Find workbook and open first sheet
 sheet = client.open("WeldingReadIn").sheet1
-
 
 # Read USB data
 import serial
@@ -45,6 +47,14 @@ CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 30
+
+# Parameter Enum
+class Parameter(Enum):
+    angle = 5
+    distance = 6
+    speed = 7
+    current = 8
+    timestamp = 9
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -121,7 +131,7 @@ def getRange(x, C):
     range = []
     range.append(x - UPDATE_FREQ + 3)
     range.append(C)
-    range.append(x + 3)
+    range.append(x + 3 - 1)
     range.append(C)
     return(range)
 
@@ -188,11 +198,17 @@ with picamera.PiCamera() as camera:
                 dX = currentDispX - prevDispX
                 speed.append(dX / dT)
 
-            timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
             index = index + 1
+            timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 
             # Write to Google sheets every UPDATE_FREQ samples
             if index % UPDATE_FREQ == 0:
+
+                for x in range 5:9
+                    # Select Range
+                    range = getRange(index, 9)
+                    cell_list = sheet.range(range[0], range[1], range[2], range[3])
+
                 #sheet.update_cells(index + 3, 5, angle[-1])
                 #sheet.update_cell(index + 3, 6, distance[-1])
                 #sheet.update_cell(index + 3, 7, speed[-1])
@@ -200,24 +216,26 @@ with picamera.PiCamera() as camera:
                 #sheet.update_cell(index + 3, 9, timestamp[-1])
 
                 # Select Range
-                range = getRange(30, 9)
+                range = getRange(index, 9)
                 cell_list = sheet.range(range[0], range[1], range[2], range[3])
 
                 for cell in cell_list:
                     cell.value = timestamp[cellIndex]
                     cellIndex = cellIndex + 1
-                    print(cellIndex)
 
                 sheet.update_cells(cell_list)
 
                 cellIndex = 0
 
                 # Clean-up sheets
-                del angle[:]
-                del distance[:]
-                del speed[:]
-                #del current[:]
+                del angle[0:-1] # Remove everything but last element
+                del distance[0:-1]
+                del speed[0:-1]
+                #del current[0:-1]
                 del timestamp[:]
+
+
+
 
             currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1]) + ' < ' + str(currentHigh) + '\n'
             distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1]) + ' < ' + str(distHigh) + '\n'
