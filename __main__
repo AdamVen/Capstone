@@ -27,13 +27,13 @@ client = gspread.authorize(creds)
 # Find workbook and open first sheet
 sheet = client.open("WeldingReadIn").sheet1
 
-# Test sheet functonality
-sheet.update_cell(3, 3, "4")
-print(sheet.cell(4, 3).value)
 
 # Read USB data
 import serial
 import time
+
+# For time stamping data
+import datetime
 
 # Open up welding parameter data worksheet
 wb = openpyxl.load_workbook('/home/pi/Downloads/WeldingParameters.xlsx')
@@ -44,6 +44,7 @@ CONST_START_ROW = 5
 CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
+UPDATE_FREQ = 30
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -51,20 +52,29 @@ h = CONST_END_ROW - CONST_START_ROW + 1
 weldingParameters = [['-1' for x in range(w)] for y in range(h)] # weldingParameters[r][c]
 
 # Welding Parameters
-distance = 0
-current = 0
-angle = 0
+distance = [0]
+current = [0]
+angle = [0]
 acceleration = [['-1' for x in range(3)] for y in range(2)] # [X1 Y1 Z1; X2 Y2 Z2]
-speed = 0
+speed = [0]
 currentDispX =  0
+timestamp = []
 
 # Parameter defines for Table Look-up
+# To Do: Add Try-Catch block to handle sheet read fails
 metal = ['0', '1']
-metalIndex = 0
+metalIndex = int(sheet.cell(3, 3).value)
 transfer = ['0', '1']
-transferIndex = 0
+transferIndex = int(sheet.cell(4, 3).value)
 thickness = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10']
-thicknessIndex = 4
+thicknessIndex = int(sheet.cell(5, 3).value)
+
+# For iterating through Google Sheets cells
+cellIndex = 0
+index = 0
+
+# Create ID
+id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
 
 # Set-up USB
 ser = serial.Serial('/dev/ttyUSB0', 19200)
@@ -80,7 +90,7 @@ for r in range(CONST_START_ROW, CONST_END_ROW + 1):
 # Extract ID Column
 idCol = [item[11] for item in weldingParameters]
 
-# Simulate entered ID
+# Create ID
 id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
 
 # Get table index from id
@@ -103,12 +113,22 @@ angleLow= [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
-# To-Do
+# To-Do (Maybe not, confirm with Ringo)
 # Horizontal Weld: Drop angles by 0 to 15 degrees
 # Vertical Weld: Drop current by 10%
 
+def getRange(x, C):
+    range = []
+    range.append(x - UPDATE_FREQ + 3)
+    range.append(C)
+    range.append(x + 3)
+    range.append(C)
+    return(range)
+
+
 # Commence stream
 print('waiting for connection')
+
 
 with picamera.PiCamera() as camera:
     camera.resolution = (1280, 720)
@@ -134,7 +154,7 @@ with picamera.PiCamera() as camera:
         print('stream starting')
         camera.start_recording(connection, format='h264')
 
-        timeout = time.time() + 600
+        timeout = time.time() + 300
 
         while time.time() < timeout:
 
@@ -144,33 +164,66 @@ with picamera.PiCamera() as camera:
             measurementValue = measurement.split("\\", 1)[0]
 
             if "A" in param:
-                angle = measurementValue
+                angle.append(measurementValue)
+
+                if float(angle[-1]) > 75:
+                    i = 0
+                elif float(angle[-1]) < 55:
+                    i = 2
+                else:
+                    i = 1
 
             if "D" in param:
-                distance = measurementValue
+                distance.append(measurementValue)
 
             if "LR" in param:
+
+                #print(type(currentDispX))
                 prevDispX = currentDispX
+                #print(type(prevDispX))
                 currentDispX =  float(measurementValue)
                 prevTime = currentTime
                 currentTime = time.time()
                 dT = currentTime - prevTime
                 dX = currentDispX - prevDispX
-                speed = dX / dT
+                speed.append(dX / dT)
 
-            if float(angle) > 75:
-                i = 0
-            elif float(angle) < 55:
-                i = 2
-            else:
-                i = 1
+            timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            index = index + 1
 
+            # Write to Google sheets every UPDATE_FREQ samples
+            if index % UPDATE_FREQ == 0:
+                #sheet.update_cells(index + 3, 5, angle[-1])
+                #sheet.update_cell(index + 3, 6, distance[-1])
+                #sheet.update_cell(index + 3, 7, speed[-1])
+                #sheet.update_cell(index + 3, 8, current[-1]) Placeholder
+                #sheet.update_cell(index + 3, 9, timestamp[-1])
 
-            currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current) + ' < ' + str(currentHigh) + '\n'
-            distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance) + ' < ' + str(distHigh) + '\n'
-            angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle) + ' < ' + str(angleHigh[i]) + '\n'
+                # Select Range
+                range = getRange(30, 9)
+                cell_list = sheet.range(range[0], range[1], range[2], range[3])
+
+                for cell in cell_list:
+                    cell.value = timestamp[cellIndex]
+                    cellIndex = cellIndex + 1
+                    print(cellIndex)
+
+                sheet.update_cells(cell_list)
+
+                cellIndex = 0
+
+                # Clean-up sheets
+                del angle[:]
+                del distance[:]
+                del speed[:]
+                #del current[:]
+                del timestamp[:]
+
+            currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1]) + ' < ' + str(currentHigh) + '\n'
+            distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1]) + ' < ' + str(distHigh) + '\n'
+            angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle[-1]) + ' < ' + str(angleHigh[i]) + '\n'
             #speedStr = 'Speed: ' + str(speed) + ' dX: ' + str(dX) + ' dT: ' + str(dT)
-            speedStr = 'Speed: ' + str(speed)[:5]
+            speedStr = 'Speed: ' + str(speed[-1])[:5]
             outStr = currentStr + distanceStr + angleStr + speedStr
 
             camera.annotate_text = outStr
@@ -179,3 +232,5 @@ with picamera.PiCamera() as camera:
         connection.close()
         server_socket.close()
         print('stream ending')
+
+
