@@ -30,6 +30,9 @@ client = gspread.authorize(creds)
 # Find workbook and open first sheet
 sheet = client.open("WeldingReadIn").sheet1
 
+# For creating Thread to handle Google Sheet writes
+from threading import Thread
+
 # Read USB data
 import serial
 import time
@@ -46,7 +49,8 @@ CONST_START_ROW = 5
 CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
-UPDATE_FREQ = 30
+UPDATE_FREQ = 50
+BAUD_RATE = 57600
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -76,14 +80,13 @@ thicknessIndex = int(sheet.cell(5, 3).value)
 # For iterating through Google Sheets cells
 cellIndex = 0
 index = 0
+prevIndex = 0
 
 # Create ID
 id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
 
 # Set-up USB
-ser = serial.Serial('/dev/ttyUSB0', 19200)
-s = []
-i = 0
+ser = serial.Serial('/dev/ttyUSB0', BAUD_RATE)
 
 # Load data from excel sheet
 for r in range(CONST_START_ROW, CONST_END_ROW + 1):
@@ -121,18 +124,31 @@ angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 # Horizontal Weld: Drop angles by 0 to 15 degrees
 # Vertical Weld: Drop current by 10%
 
-def getRange(x, C):
-    range = []
-    range.append(x - UPDATE_FREQ + 3)
-    range.append(C)
-    range.append(x + 3 - 1)
-    range.append(C)
-    return(range)
+class SheetsThread(Thread):
+    def __init__(self, index, prevIndex):
+        Thread.__init__(self)
+        self.locIndex = index
+        self.locPrevIndex = prevIndex
 
+    def run(self):
+        for paramIndex in range(0, 5):
+            # Select Range
+            cell_list = sheet.range(self.locPrevIndex + 3, paramIndex + 5, self.locIndex + 3, paramIndex + 5)
+
+            cellIndex = 0
+
+            for cell in cell_list:
+                cell.value = parameterList[paramIndex][cellIndex]
+                cellIndex = cellIndex + 1
+
+            sheet.update_cells(cell_list)
+
+            del parameterList[paramIndex][prevIndex:index]
+
+myThreadObj = SheetsThread(cellIndex, 0)
 
 # Commence stream
 print('waiting for connection')
-
 
 with picamera.PiCamera() as camera:
     camera.resolution = (1280, 720)
@@ -181,13 +197,12 @@ with picamera.PiCamera() as camera:
 
             if "D" in param:
                 distance.append(measurementValue)
+                print(str(measurementValue))
             else:
                 distance.append(distance[-1])
 
             if "LR" in param:
-                #print(type(currentDispX))
                 prevDispX = currentDispX
-                #print(type(prevDispX))
                 currentDispX =  float(measurementValue)
                 prevTime = currentTime
                 currentTime = time.time()
@@ -199,53 +214,27 @@ with picamera.PiCamera() as camera:
 
             index = index + 1
             timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
-            current.append('1')
-
-            # Write to Google sheets every UPDATE_FREQ samples
-            if index % UPDATE_FREQ == 0:
-
-                for paramIndex in range(0, 4):
-                    # Select Range
-                    range = getRange(index, paramIndex + 5)
-                    cell_list = sheet.range(range[0], range[1], range[2], range[3])
-
-                    cellIndex = 0
-
-                    for cell in cell_list:
-                        try:
-                            cell.value = parameterList[paramIndex][cellIndex]
-                        except:
-                            print("PI: " + str(paramIndex))
-                            print("CI: " + str(cellIndex))
-                            print("PL LEN: " + str(len(parameterList)))
-                            print("P LEN: " + str(len(parameterList[paramIndex])))
-
-                        cellIndex = cellIndex + 1
-
-                    cellIndex = 0
-                    sheet.update_cells(cell_list)
-
-
-
-                # Clean-up sheets
-                del angle[0:-1] # Remove everything but last element
-                del distance[0:-1]
-                del speed[0:-1]
-                #del current[0:-1]
-                del timestamp[:]
+            current.append(index)
 
             currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1]) + ' < ' + str(currentHigh) + '\n'
             distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1]) + ' < ' + str(distHigh) + '\n'
             angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle[-1]) + ' < ' + str(angleHigh[i]) + '\n'
-            #speedStr = 'Speed: ' + str(speed) + ' dX: ' + str(dX) + ' dT: ' + str(dT)
             speedStr = 'Speed: ' + str(speed[-1])[:5]
-            outStr = currentStr + distanceStr + angleStr + speedStr
-
+            outStr = currentStr + distanceStr + angleStr + speedStr + '\n' + str(index)
             camera.annotate_text = outStr
+
+            # Write to Google sheets every UPDATE_FREQ samples
+            if (index % UPDATE_FREQ == 0) & (myThreadObj.isAlive() == 0):
+                myThreadObj = SheetsThread(index, prevIndex)
+                myThreadObj.setName('T1')
+                myThreadObj.start()
+                prevIndex = index
+
         camera.stop_recording()
     finally:
         connection.close()
         server_socket.close()
         print('stream ending')
+
 
 
