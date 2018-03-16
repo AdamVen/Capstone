@@ -31,7 +31,8 @@ client = gspread.authorize(creds)
 sheet = client.open("WeldingReadIn").sheet1
 
 # For creating Thread to handle Google Sheet writes
-from threading import Thread
+import threading
+from Queue import Queue
 
 # Read USB data
 import serial
@@ -51,7 +52,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
-SESSION_LENGTH = 10 # In seconds
+SESSION_LENGTH = 45 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -71,12 +72,11 @@ parameterList = []
 parameterList.extend((angle, distance, accFB, accLR, current, timestamp))
 
 # Parameter defines for Table Look-up
-# To Do: Add Try-Catch block to handle sheet read fails
 metal = ['0', '1']
-metalIndex = int(sheet.cell(3, 3).value)
 transfer = ['0', '1']
-transferIndex = int(sheet.cell(4, 3).value)
 thickness = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10']
+metalIndex = int(sheet.cell(3, 3).value)
+transferIndex = int(sheet.cell(4, 3).value)
 thicknessIndex = int(sheet.cell(5, 3).value)
 
 # For iterating through Google Sheets cells
@@ -122,29 +122,24 @@ angleLow= [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
-class SheetsThread(Thread):
-    def __init__(self, index, prevIndex):
-        Thread.__init__(self)
-        self.locIndex = index
-        self.locPrevIndex = prevIndex
+def SheetsThread(locIndex, locPrevIndex):
 
-    def run(self):
-        for paramIndex in range(0, 6):
-            # Select Range
-            cell_list = sheet.range(self.locPrevIndex + 3, paramIndex + 5, self.locIndex + 3, paramIndex + 5)
+    print(locPrevIndex)
+    print(*timestamp[locPrevIndex:locIndex], sep = '\n')
 
-            cellIndex = 0
+    for paramIndex in range(0, 6):
+        # Select Range
+        cell_list = sheet.range(locPrevIndex + 3, paramIndex + 5, locIndex + 3, paramIndex + 5)
 
-            for cell in cell_list:
-                cell.value = parameterList[paramIndex][cellIndex]
-                cellIndex = cellIndex + 1
+        cellIndex = 0
 
-            sheet.update_cells(cell_list)
+        for cell in cell_list:
+            cell.value = parameterList[paramIndex][cellIndex]
+            cellIndex = cellIndex + 1
 
-            del parameterList[paramIndex][prevIndex:index]
+        sheet.update_cells(cell_list)
 
-myThreadObj = SheetsThread(cellIndex, 0)
-
+        del parameterList[paramIndex][locPrevIndex:locIndex]
 
 with picamera.PiCamera() as camera:
     camera.resolution = (1920, 1080)
@@ -154,10 +149,13 @@ with picamera.PiCamera() as camera:
 
     currentTime = time.time()
 
-    streamFlag = sheet.cell(6, 3).value
+    streamFlag = int(sheet.cell(6, 3).value)
+
+    sheetThreads = []
+    sheetsQueue = Queue.Queue()
 
     try:
-        if (int(streamFlag) == 1):
+        if (streamFlag == 1):
             print('Stream Setting Up')
             server_socket = socket.socket()
             try:
@@ -183,8 +181,12 @@ with picamera.PiCamera() as camera:
 
             data = str(ser.readline())
 
-            param, measurement = data.split(":")
-            measurementValue = measurement.split("\\", 1)[0]
+            try:
+                param, measurement = data.split(":")
+                measurementValue = measurement.split("\\", 1)[0]
+            except:
+                param = null
+                print('Serial Read Error')
 
             if "A" in param:
                 angle.append(measurementValue)
@@ -229,11 +231,11 @@ with picamera.PiCamera() as camera:
             camera.annotate_text = outStr
 
             # Call thread to write to Google sheets every UPDATE_FREQ samples
-            if (index % UPDATE_FREQ == 0) & (myThreadObj.isAlive() == 0):
-                print(*angle, sep = '\n')
-                myThreadObj = SheetsThread(index, prevIndex)
-                myThreadObj.setName('T1')
-                myThreadObj.start()
+            if (index % UPDATE_FREQ == 0):
+                newSheetThread = threading.Thread(target = SheetsThread, args = (index, prevIndex))
+                newSheetThread.setDaemon(true)
+                newSheetThread.start()
+                sheetThreads.append(newSheetThread)
                 prevIndex = index
 
         camera.stop_recording()
@@ -244,6 +246,7 @@ with picamera.PiCamera() as camera:
             print('Stream Ended')
         else:
             print('Recording Complete')
+
 
 
 
