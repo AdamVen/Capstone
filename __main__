@@ -32,7 +32,6 @@ sheet = client.open("WeldingReadIn").sheet1
 
 # For creating Thread to handle Google Sheet writes
 import threading
-from Queue import Queue
 
 # Read USB data
 import serial
@@ -82,7 +81,10 @@ thicknessIndex = int(sheet.cell(5, 3).value)
 # For iterating through Google Sheets cells
 cellIndex = 0
 index = 0
-prevIndex = 0
+indexOffset = 0
+
+# For Google Sheets threads
+lock = threading.Lock()
 
 # Create ID
 id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
@@ -122,24 +124,22 @@ angleLow= [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
-def SheetsThread(locIndex, locPrevIndex):
+def SheetsThread(indexOffset):
+    with lock:
+        for paramIndex in range(0, 6):
+            # Select Range
+            cell_list = sheet.range(indexOffset + 3, paramIndex + 5, indexOffset + UPDATE_FREQ + 3, paramIndex + 5)
 
-    print(locPrevIndex)
-    print(*timestamp[locPrevIndex:locIndex], sep = '\n')
+            cellIndex = 0
 
-    for paramIndex in range(0, 6):
-        # Select Range
-        cell_list = sheet.range(locPrevIndex + 3, paramIndex + 5, locIndex + 3, paramIndex + 5)
+            for cell in cell_list:
+                cell.value = parameterList[paramIndex][cellIndex]
+                cellIndex = cellIndex + 1
 
-        cellIndex = 0
+            sheet.update_cells(cell_list)
 
-        for cell in cell_list:
-            cell.value = parameterList[paramIndex][cellIndex]
-            cellIndex = cellIndex + 1
+            del parameterList[paramIndex][0:UPDATE_FREQ]
 
-        sheet.update_cells(cell_list)
-
-        del parameterList[paramIndex][locPrevIndex:locIndex]
 
 with picamera.PiCamera() as camera:
     camera.resolution = (1920, 1080)
@@ -150,9 +150,6 @@ with picamera.PiCamera() as camera:
     currentTime = time.time()
 
     streamFlag = int(sheet.cell(6, 3).value)
-
-    sheetThreads = []
-    sheetsQueue = Queue.Queue()
 
     try:
         if (streamFlag == 1):
@@ -232,11 +229,9 @@ with picamera.PiCamera() as camera:
 
             # Call thread to write to Google sheets every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
-                newSheetThread = threading.Thread(target = SheetsThread, args = (index, prevIndex))
-                newSheetThread.setDaemon(true)
+                newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, ))
                 newSheetThread.start()
-                sheetThreads.append(newSheetThread)
-                prevIndex = index
+                indexOffset = index
 
         camera.stop_recording()
     finally:
