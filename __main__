@@ -51,6 +51,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
+SESSION_LENGTH = 10 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -62,11 +63,12 @@ distance = [0]
 current = [0]
 angle = [0]
 acceleration = [['-1' for x in range(3)] for y in range(2)] # [X1 Y1 Z1; X2 Y2 Z2]
-speed = [0]
-currentDispX =  0
+accFB = [0]
+accLR = [0]
+currentDispV =  0
 timestamp = []
 parameterList = []
-parameterList.extend((angle, distance, speed, current, timestamp))
+parameterList.extend((angle, distance, accFB, accLR, current, timestamp))
 
 # Parameter defines for Table Look-up
 # To Do: Add Try-Catch block to handle sheet read fails
@@ -120,10 +122,6 @@ angleLow= [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
-# To-Do (Maybe not, confirm with Ringo)
-# Horizontal Weld: Drop angles by 0 to 15 degrees
-# Vertical Weld: Drop current by 10%
-
 class SheetsThread(Thread):
     def __init__(self, index, prevIndex):
         Thread.__init__(self)
@@ -131,7 +129,7 @@ class SheetsThread(Thread):
         self.locPrevIndex = prevIndex
 
     def run(self):
-        for paramIndex in range(0, 5):
+        for paramIndex in range(0, 6):
             # Select Range
             cell_list = sheet.range(self.locPrevIndex + 3, paramIndex + 5, self.locIndex + 3, paramIndex + 5)
 
@@ -147,34 +145,39 @@ class SheetsThread(Thread):
 
 myThreadObj = SheetsThread(cellIndex, 0)
 
-# Commence stream
-print('waiting for connection')
 
 with picamera.PiCamera() as camera:
-    camera.resolution = (1280, 720)
-    camera.framerate = 24
+    camera.resolution = (1920, 1080)
+    camera.framerate = 30
+    camera.brightness = 55
     camera.annotate_text_size = 16
-
-    server_socket = socket.socket()
-    try:
-        server_socket.bind(('0.0.0.0', 8000))
-        print('8000 used')
-    except:
-        server_socket.bind(('0.0.0.0', 8001))
-        print('8001 used')
-
-    server_socket.listen(0)
 
     currentTime = time.time()
 
-    # Accept a single connection and make a file-like object out of it
-    connection = server_socket.accept()[0].makefile('wb')
-    print('initial connection made')
-    try:
-        print('stream starting')
-        camera.start_recording(connection, format='h264')
+    streamFlag = sheet.cell(6, 3).value
 
-        timeout = time.time() + 300
+    try:
+        if (int(streamFlag) == 1):
+            print('Stream Setting Up')
+            server_socket = socket.socket()
+            try:
+                server_socket.bind(('0.0.0.0', 8000))
+                print('Connect via port 8000')
+            except:
+                server_socket.bind(('0.0.0.0', 8001))
+                print('Connect via port 8001')
+
+            server_socket.listen(0)
+
+            # Accept a single connection and make a file-like object out of it
+            connection = server_socket.accept()[0].makefile('wb')
+            print('Stream Starting')
+            camera.start_recording(connection, format='h264')
+        else:
+            print('Recording Starting')
+            camera.start_recording('/home/pi/Downloads/' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S') + '.h264')
+
+        timeout = time.time() + SESSION_LENGTH
 
         while time.time() < timeout:
 
@@ -197,34 +200,37 @@ with picamera.PiCamera() as camera:
 
             if "D" in param:
                 distance.append(measurementValue)
-                print(str(measurementValue))
             else:
                 distance.append(distance[-1])
 
             if "LR" in param:
-                prevDispX = currentDispX
-                currentDispX =  float(measurementValue)
-                prevTime = currentTime
-                currentTime = time.time()
-                dT = currentTime - prevTime
-                dX = currentDispX - prevDispX
-                speed.append(dX / dT)
+                accLR.append(round(float(measurementValue), 3))
             else:
-                speed.append(speed[-1])
+                accLR.append(accLR[-1])
+
+            if "FB" in param:
+                accFB.append(round(float(measurementValue), 3))
+            else:
+                accFB.append(accFB[-1])
+
+            if "I" in param:
+                current.append(round(float(measurementValue), 3))
+            else:
+                current.append(current[-1])
 
             index = index + 1
             timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
-            current.append(index)
 
-            currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1]) + ' < ' + str(currentHigh) + '\n'
-            distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1]) + ' < ' + str(distHigh) + '\n'
-            angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle[-1]) + ' < ' + str(angleHigh[i]) + '\n'
-            speedStr = 'Speed: ' + str(speed[-1])[:5]
-            outStr = currentStr + distanceStr + angleStr + speedStr + '\n' + str(index)
+            currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1])[:3] + ' < ' + str(currentHigh) + '\n'
+            distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1])[:5] + ' < ' + str(distHigh) + '\n'
+            angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle[-1])[:3] + ' < ' + str(angleHigh[i]) + '\n'
+            accStr = 'LR Acc: ' + str(accLR[-1])[:3] + ' FB Acc: ' + str(accFB[-1])[:3]
+            outStr = currentStr + distanceStr + angleStr + accStr
             camera.annotate_text = outStr
 
-            # Write to Google sheets every UPDATE_FREQ samples
+            # Call thread to write to Google sheets every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0) & (myThreadObj.isAlive() == 0):
+                print(*angle, sep = '\n')
                 myThreadObj = SheetsThread(index, prevIndex)
                 myThreadObj.setName('T1')
                 myThreadObj.start()
@@ -232,9 +238,12 @@ with picamera.PiCamera() as camera:
 
         camera.stop_recording()
     finally:
-        connection.close()
-        server_socket.close()
-        print('stream ending')
+        if(streamFlag == 1):
+            connection.close()
+            server_socket.close()
+            print('Stream Ended')
+        else:
+            print('Recording Complete')
 
 
 
