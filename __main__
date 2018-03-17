@@ -22,14 +22,6 @@ from enum import Enum
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Create client to interact with Google Drive Api
-scope = ['https://spreadsheets.google.com/feeds']
-creds = ServiceAccountCredentials.from_json_keyfile_name('/home/pi/Downloads/client.json', scope)
-client = gspread.authorize(creds)
-
-# Find workbook and open first sheet
-sheet = client.open("WeldingReadIn").sheet1
-
 # For creating Thread to handle Google Sheet writes
 import threading
 
@@ -39,6 +31,17 @@ import time
 
 # For time stamping data
 import datetime
+
+# For writing video
+import io
+
+# Create client to interact with Google Drive Api
+scope = ['https://spreadsheets.google.com/feeds']
+creds = ServiceAccountCredentials.from_json_keyfile_name('/home/pi/Downloads/client.json', scope)
+client = gspread.authorize(creds)
+
+# Find workbook and open first sheet
+sheet = client.open("WeldingReadIn").sheet1
 
 # Open up welding parameter data worksheet
 wb = openpyxl.load_workbook('/home/pi/Downloads/WeldingParameters.xlsx')
@@ -51,7 +54,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
-SESSION_LENGTH = 45 # In seconds
+SESSION_LENGTH = 15 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -124,6 +127,23 @@ angleLow= [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
+class dualOutput(object):
+    def __init__(self, filename, con):
+        self.output_file = io.open(filename, 'wb')
+        self.output_sock = con
+
+    def write(self, buf):
+        self.output_file.write(buf)
+        self.output_sock.write(buf)
+
+    def flush(self):
+        self.output_file.flush()
+        self.output_sock.flush()
+
+    def close(self):
+        self.output_file.close()
+        self.output_sock.close()
+
 def SheetsThread(indexOffset):
     with lock:
         for paramIndex in range(0, 6):
@@ -140,7 +160,6 @@ def SheetsThread(indexOffset):
 
             del parameterList[paramIndex][0:UPDATE_FREQ]
 
-
 with picamera.PiCamera() as camera:
     camera.resolution = (1920, 1080)
     camera.framerate = 30
@@ -152,25 +171,32 @@ with picamera.PiCamera() as camera:
     streamFlag = int(sheet.cell(6, 3).value)
 
     try:
-        if (streamFlag == 1):
-            print('Stream Setting Up')
+        tsString = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+
+        if ((streamFlag == 1) or (streamFlag == 3)):
             server_socket = socket.socket()
+
             try:
                 server_socket.bind(('0.0.0.0', 8000))
-                print('Connect via port 8000')
+                print('Waiting on connection via port 8000')
             except:
                 server_socket.bind(('0.0.0.0', 8001))
-                print('Connect via port 8001')
+                print('Waiting on connection via port 8001')
 
             server_socket.listen(0)
-
-            # Accept a single connection and make a file-like object out of it
             connection = server_socket.accept()[0].makefile('wb')
-            print('Stream Starting')
-            camera.start_recording(connection, format='h264')
-        else:
+
+            if (streamFlag == 1):
+                print('Stream Starting')
+                camera.start_recording(connection, format='h264')
+            else:
+                print('Stream and Recording Starting')
+                customOutput = dualOutput('/home/pi/Downloads/' + tsString + '.h264', connection)
+                camera.start_recording(customOutput, format='h264')
+
+        elif (streamFlag == 2):
             print('Recording Starting')
-            camera.start_recording('/home/pi/Downloads/' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S') + '.h264')
+            camera.start_recording('/home/pi/Downloads/' + tsString + '.h264')
 
         timeout = time.time() + SESSION_LENGTH
 
