@@ -267,7 +267,3 @@ with picamera.PiCamera() as camera:
             print('Stream Ended')
         else:
             print('Recording Complete')
-
-
-
-
