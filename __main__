@@ -15,6 +15,9 @@ import subprocess
 # Excel imports
 import openpyxl
 
+# GUI imports
+from tkinter import *
+
 # Enum import to facilitate looping through welding parameters
 from enum import Enum
 
@@ -165,6 +168,7 @@ with picamera.PiCamera() as camera:
     camera.framerate = 30
     camera.brightness = 55
     camera.annotate_text_size = 16
+    i = 0
 
     currentTime = time.time()
 
@@ -200,6 +204,14 @@ with picamera.PiCamera() as camera:
 
         timeout = time.time() + SESSION_LENGTH
 
+        # Set-up GUI
+        ROOT = Tk()
+        LOOP_ACTIVE = True
+        ROOT.config(cursor="none")
+        f = Frame(ROOT)
+        ROOT.attributes("-fullscreen", True)
+
+
         while time.time() < timeout:
 
             data = str(ser.readline())
@@ -208,10 +220,10 @@ with picamera.PiCamera() as camera:
                 param, measurement = data.split(":")
                 measurementValue = measurement.split("\\", 1)[0]
             except:
-                param = null
+                param = ""
                 print('Serial Read Error')
 
-            if "A" in param:
+            if "angLR" in param:
                 angle.append(measurementValue)
 
                 if float(angle[-1]) > 75:
@@ -238,7 +250,7 @@ with picamera.PiCamera() as camera:
             else:
                 accFB.append(accFB[-1])
 
-            if "I" in param:
+            if "C" in param:
                 current.append(round(float(measurementValue), 3))
             else:
                 current.append(current[-1])
@@ -253,13 +265,24 @@ with picamera.PiCamera() as camera:
             outStr = currentStr + distanceStr + angleStr + accStr
             camera.annotate_text = outStr
 
-            # Call thread to write to Google sheets every UPDATE_FREQ samples
+            # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
                 newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, ))
                 newSheetThread.start()
                 indexOffset = index
 
+            # Update GUI
+            f.destroy()
+            f = Frame(ROOT)
+            LABEL = Label(f, text = outStr)
+            LABEL.config(font=("Courier", 80))
+            LABEL.pack()
+            f.pack()
+            ROOT.update()
+
         camera.stop_recording()
+        ROOT.quit()
+
     finally:
         if(streamFlag == 1):
             connection.close()
