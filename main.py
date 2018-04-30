@@ -1,5 +1,5 @@
-# The purpose of this program is to stream video with a dynamic text overlay simulating welding parameters
-# that will later be obtained from an instrumentation module.
+# Author: Adam Vengroff
+# Description: This software processes serial data
 
 # RPi peripherals imports
 import picamera
@@ -15,19 +15,17 @@ import subprocess
 # Excel imports
 import openpyxl
 
-# GUI imports
-from tkinter import *
-
-# Enum import to facilitate looping through welding parameters
-from enum import Enum
+# Custom-written module imports
+from DualOutput import DualOutput
+from ParameterGraph import ParameterGraph
+from SheetsThread import SheetsThread
 
 # Google Project Api Imports
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Multithreading imports
+# Multi-threading imports
 import threading
-from threading import Timer
 
 # Read USB data
 import serial
@@ -38,6 +36,17 @@ import datetime
 
 # For writing video
 import io
+
+# For GUI
+import tkinter as tk
+from tkinter import ttk
+from tkinter import *
+
+# For embedding graphs into GUI
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.figure import Figure
 
 # Create client to interact with Google Drive Api
 scope = ['https://spreadsheets.google.com/feeds']
@@ -58,7 +67,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
-SESSION_LENGTH = 60 # In seconds
+SESSION_LENGTH = 15 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -134,47 +143,19 @@ angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 # GUI Set-Up
 outStr = ""
 ROOT = Tk()
-f = Frame(ROOT)
+angleFrame = Frame(ROOT)
 ROOT.attributes("-fullscreen", True)
-
-
-class dualOutput(object):
-    def __init__(self, filename, con):
-        self.output_file = io.open(filename, 'wb')
-        self.output_sock = con
-
-    def write(self, buf):
-        self.output_file.write(buf)
-        self.output_sock.write(buf)
-
-    def flush(self):
-        self.output_file.flush()
-        self.output_sock.flush()
-
-    def close(self):
-        self.output_file.close()
-        self.output_sock.close()
-
-def SheetsThread(indexOffset):
-    with lock:
-        for paramIndex in range(0, 6):
-            # Select Range
-            cell_list = sheet.range(indexOffset + 3, paramIndex + 5, indexOffset + UPDATE_FREQ + 3, paramIndex + 5)
-
-            cellIndex = 0
-
-            for cell in cell_list:
-                cell.value = parameterList[paramIndex][cellIndex]
-                cellIndex = cellIndex + 1
-
-            sheet.update_cells(cell_list)
-
-            del parameterList[paramIndex][0:UPDATE_FREQ]
+displayMode = 2
 
 f = Frame(ROOT)
 var = StringVar()
 var.set("test")
 LABEL = Label(f, textvariable = var)
+
+# Instantiate graph glasses
+angleGraph = ParameterGraph(1, 2, 3, 4, "test", 7, 9)
+ROOT.update()
+
 
 def updateFrame():
     LABEL.config(font=("Courier", 55))
@@ -214,7 +195,7 @@ with picamera.PiCamera() as camera:
                 camera.start_recording(connection, format='h264')
             else:
                 print('Stream and Recording Starting')
-                customOutput = dualOutput('/home/pi/Downloads/' + tsString + '.h264', connection)
+                customOutput = DualOutput('/home/pi/Downloads/' + tsString + '.h264', connection)
                 camera.start_recording(customOutput, format='h264')
 
         elif (streamFlag == 2):
@@ -279,12 +260,18 @@ with picamera.PiCamera() as camera:
             outStr = currentStr + distanceStr + angleStr + accStr
             camera.annotate_text = outStr
 
-            var.set(outStr)
-            updateFrame()
+            if displayMode == 1:
+                var.set(outStr)
+                updateFrame()
+
+            if displayMode == 2:
+                ParameterGraph
+
+
 
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
-                newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, ))
+                newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, UPDATE_FREQ, parameterList, sheet, ))
                 newSheetThread.start()
                 indexOffset = index
 
