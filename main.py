@@ -155,6 +155,12 @@ LABEL = Label(f, textvariable = var)
 # Instantiate graph glasses
 angleGraph = ParameterGraph(1, 2, 3, 4, "test", 7, 9)
 ROOT.update()
+time.sleep(1)
+
+while (1):
+    angleGraph.addValue(index)
+    index = index + 1
+    ROOT.update()
 
 
 def updateFrame():
