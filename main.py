@@ -153,12 +153,15 @@ var.set("test")
 LABEL = Label(f, textvariable = var)
 
 # Instantiate graph glasses
-angleGraph = ParameterGraph(1, 2, 3, 4, "test", 7, 9)
+paramGraph = ParameterGraph(1, 2, 3, 4, "test", 7, 9)
 ROOT.update()
 time.sleep(1)
 
+import math
+
 while (1):
-    angleGraph.addValue(index)
+    paramGraph.addValue(index % 3, 0)
+    paramGraph.addValue(math.sin(index), 1)
     index = index + 1
     ROOT.update()
 
@@ -272,8 +275,6 @@ with picamera.PiCamera() as camera:
 
             if displayMode == 2:
                 ParameterGraph
-
-
 
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
