@@ -67,7 +67,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
-SESSION_LENGTH = 15 # In seconds
+SESSION_LENGTH = 60 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -153,17 +153,19 @@ var.set("test")
 LABEL = Label(f, textvariable = var)
 
 # Instantiate graph glasses
-paramGraph = ParameterGraph(1, 2, 3, 4, "test", 7, 9)
+paramGraph = ParameterGraph([198, 202], [10, 12], [85, 95], [-0.1, 0.1])
 ROOT.update()
 time.sleep(1)
-
 import math
 
-while (1):
-    paramGraph.addValue(index % 3, 0)
-    paramGraph.addValue(math.sin(index), 1)
-    index = index + 1
-    ROOT.update()
+#while (1):
+#    x = 200 + (3 * math.sin(index))
+#    paramGraph.addValue(x, 0)
+#    print(x)
+#    index = index + 0.01
+#    if index > 6.28:
+#        index = 0
+#    ROOT.update()
 
 
 def updateFrame():
@@ -216,8 +218,9 @@ with picamera.PiCamera() as camera:
         LOOP_ACTIVE = True
         ROOT.config(cursor="none")
 
-        while time.time() < timeout:
+        prevTime = time.time()
 
+        while time.time() < timeout:
             data = str(ser.readline())
 
             try:
@@ -273,8 +276,15 @@ with picamera.PiCamera() as camera:
                 var.set(outStr)
                 updateFrame()
 
-            if displayMode == 2:
-                ParameterGraph
+            if (time.time() > prevTime):
+                if displayMode == 2:
+                    paramGraph.addValue(float(current[-1]), 0)
+                    paramGraph.addValue(float(distance[-1]), 1)
+                    paramGraph.addValue(float(angle[-1]), 2)
+                    paramGraph.addValue(float(accLR[-1]), 3)
+                    ROOT.update()
+                    print(str(time.time() - prevTime))
+                    prevTime = time.time()
 
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):

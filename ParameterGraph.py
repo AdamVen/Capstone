@@ -18,15 +18,23 @@ from tkinter import *
 
 class ParameterGraph(tk.Frame):
 
-    def __init__(self, xStart, xEnd, yStart, yEnd, title, lowerRange, upperRange):
+    def __init__(self, curRange, distRange, angRange, accRange):
         tk.Frame.__init__(self)
-        #label = tk.Label(self, text=title, font=("Courier", 55))
-        #label.pack(pady=1, padx=1)
 
-        self.curData = []
-        self.distData = []
-        self.angData = []
-        self.accData = []
+        self.curDataGood = []
+        self.distDataGood = []
+        self.angDataGood = []
+        self.accDataGood = []
+
+        self.curDataBad = []
+        self.distDataBad = []
+        self.angDataBad = []
+        self.accDataBad = []
+
+        self.curRange = curRange
+        self.distRange = distRange
+        self.angRange = angRange
+        self.accRange = accRange
 
         self.f = Figure(figsize = (12, 7), dpi = 100)
 
@@ -56,46 +64,87 @@ class ParameterGraph(tk.Frame):
         self.canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         tk.Frame.pack(self)
-        print("initialized")
 
     def addValue(self, data, param):
         if param == 0:
-            self.curData.append(data)
-            dataArray = self.curData
+            if self.curRange[0] < data < self.curRange[1]:
+                self.curDataGood.append(data)
+                self.curDataBad.append(None)
+            else:
+                self.curDataGood.append(None)
+                self.curDataBad.append(data)
         elif param == 1:
-            self.distData.append(data)
-            dataArray = self.distData
+            if self.distRange[0] < data < self.distRange[1]:
+                self.distDataGood.append(data)
+                self.distDataBad.append(None)
+            else:
+                self.distDataGood.append(None)
+                self.distDataBad.append(data)
         elif param == 2:
-            self.angData.append(data)
-            dataArray = self.angData
+            if self.angRange[0] < data < self.distRange[1]:
+                self.angDataGood.append(data)
+                self.angDataBad.append(None)
+            else:
+                self.angDataGood.append(None)
+                self.angDataBad.append(data)
         else:
-            dataArray = self.accData
+            if self.accRange[0] < data < self.accRange[1]:
+                self.accDataGood.append(data)
+                self.accDataBad.append(None)
+            else:
+                self.accDataGood.append(None)
+                self.accDataBad.append(data)
 
-        self.checkSize(dataArray)
-        self.drawGraph(param, dataArray)
+        self.checkSize(param)
+        self.drawGraph(param)
 
-    def checkSize(self, dataArray):
-        if len(dataArray) > 10:
-            dataArray.pop(0)
+    def checkSize(self, param):
+        if param == 0:
+            if len(self.curDataGood) > 50:
+                self.curDataGood.pop(0)
+                self.curDataBad.pop(0)
+        elif param == 1:
+            if len(self.distDataGood) > 50:
+                self.distDataGood.pop(0)
+                self.distDataBad.pop(0)
+        elif param == 2:
+            if len(self.angDataGood) > 50:
+                self.angDataGood.pop(0)
+                self.angDataBad.pop(0)
+        else:
+            if len(self.accDataGood) > 50:
+                self.accDataGood.pop(0)
+                self.accDataBad.pop(0)
 
-    def drawGraph(self, param, dataArray):
-
+    def drawGraph(self, param):
         if param == 0:
             subplot = self.a
-            title = "Current"
-        if param == 1:
+            subplot.clear()
+            subplot.plot(self.curDataGood, 'k', linewidth = 3)
+            subplot.plot(self.curDataBad, 'r', linewidth = 3.2)
+            subplot.axis('off')
+            subplot.set_title("Current")
+        elif param == 1:
             subplot = self.b
-            title = "Distance"
-        if param == 2:
+            subplot.clear()
+            subplot.plot(self.distDataGood, 'k', linewidth = 3)
+            subplot.plot(self.distDataBad, 'r', linewidth = 3.2)
+            subplot.axis('off')
+            subplot.set_title("Distance")
+        elif param == 2:
             subplot = self.c
-            title = "Angle"
-        if param == 3:
+            subplot.clear()
+            subplot.plot(self.angDataGood, 'k', linewidth = 3)
+            subplot.plot(self.angDataBad, 'r', linewidth = 3.2)
+            subplot.axis('off')
+            subplot.set_title("Angle")
+        else:
             subplot = self.d
-            title = "Acceleration"
+            subplot.clear()
+            subplot.plot(self.accDataGood, 'k', linewidth = 3)
+            subplot.plot(self.accDataBad, 'r', linewidth = 3.2)
+            subplot.axis('off')
+            subplot.set_title("Acceleration")
 
-        subplot.clear()
-        subplot.plot(dataArray)
-        subplot.axis('off')
-        subplot.set_title(title)
         self.canvas.draw()
         tk.Frame.pack(self)
