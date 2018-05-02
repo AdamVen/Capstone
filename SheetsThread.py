@@ -1,14 +1,14 @@
 # Author: Adam Vengroff
-# Description: This class allows data to be written to a Google Sheet
+# Description: This class creates a thread to write data to Google Sheets
 
 # Multi-threading imports
 import threading
 
-# For Google Sheets threads
-lock = threading.Lock()
+# For coordinating threads
+lockThread = threading.Lock()
 
 def SheetsThread(indexOffset, UPDATE_FREQ, parameterList, sheet):
-    with lock:
+    with lockThread:
         for paramIndex in range(0, 6):
             # Select Range
             cell_list = sheet.range(indexOffset + 3, paramIndex + 5, indexOffset + UPDATE_FREQ + 3, paramIndex + 5)

@@ -19,6 +19,7 @@ import openpyxl
 from DualOutput import DualOutput
 from ParameterGraph import ParameterGraph
 from SheetsThread import SheetsThread
+from GUIThread import GUIThread
 
 # Google Project Api Imports
 import gspread
@@ -67,7 +68,7 @@ CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
 UPDATE_FREQ = 50
 BAUD_RATE = 57600
-SESSION_LENGTH = 60 # In seconds
+SESSION_LENGTH = 90 # In seconds
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -98,9 +99,6 @@ thicknessIndex = int(sheet.cell(5, 3).value)
 cellIndex = 0
 index = 0
 indexOffset = 0
-
-# For Google Sheets threads
-lock = threading.Lock()
 
 # Create ID
 id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
@@ -153,10 +151,9 @@ var.set("test")
 LABEL = Label(f, textvariable = var)
 
 # Instantiate graph glasses
-paramGraph = ParameterGraph([198, 202], [10, 12], [85, 95], [-0.1, 0.1])
+paramGraph = ParameterGraph([198, 202], [10, 12], [85, 95], [-0.2, 0.2])
 ROOT.update()
-time.sleep(1)
-import math
+import random
 
 #while (1):
 #    x = 200 + (3 * math.sin(index))
@@ -180,6 +177,7 @@ with picamera.PiCamera() as camera:
     camera.brightness = 55
     camera.annotate_text_size = 16
     i = 0
+    param = 0
 
     currentTime = time.time()
 
@@ -224,15 +222,15 @@ with picamera.PiCamera() as camera:
             data = str(ser.readline())
 
             try:
-                param, measurement = data.split(":")
+                rawData, measurement = data.split(":")
                 measurementValue = measurement.split("\\", 1)[0]
             except:
-                param = ""
+                rawData = ""
                 print('Serial Read Error')
 
-            if "angLR" in param:
+            if "angLR" in rawData:
                 angle.append(measurementValue)
-
+                param = 2
                 if float(angle[-1]) > 75:
                     i = 0
                 elif float(angle[-1]) < 55:
@@ -242,25 +240,33 @@ with picamera.PiCamera() as camera:
             else:
                 angle.append(angle[-1])
 
-            if "D" in param:
+            if "D" in rawData:
+                param = 1
+                measurementValue = 11 + random.uniform(-2, 2)
                 distance.append(measurementValue)
             else:
                 distance.append(distance[-1])
 
-            if "LR" in param:
+            if "accLR" in rawData:
                 accLR.append(round(float(measurementValue), 3))
+                param = 3
             else:
                 accLR.append(accLR[-1])
 
-            if "FB" in param:
+            if "accFB" in rawData:
                 accFB.append(round(float(measurementValue), 3))
             else:
                 accFB.append(accFB[-1])
 
-            if "C" in param:
+            if "C" in rawData:
+                param = 0
+                measurementValue = 200 + random.uniform(-3, 3)
                 current.append(round(float(measurementValue), 3))
             else:
                 current.append(current[-1])
+
+            parsedData = measurementValue
+            print(str(rawData) + str(parsedData))
 
             index = index + 1
             timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
@@ -276,16 +282,14 @@ with picamera.PiCamera() as camera:
                 var.set(outStr)
                 updateFrame()
 
-            if (time.time() > prevTime):
-                if displayMode == 2:
-                    paramGraph.addValue(float(current[-1]), 0)
-                    paramGraph.addValue(float(distance[-1]), 1)
-                    paramGraph.addValue(float(angle[-1]), 2)
-                    paramGraph.addValue(float(accLR[-1]), 3)
-                    ROOT.update()
-                    print(str(time.time() - prevTime))
-                    prevTime = time.time()
-
+            if displayMode == 2:
+                newGUIThread = threading.Thread(target=GUIThread, args=(parsedData, param, paramGraph))
+                newGUIThread.start()
+                print(str(time.time() - prevTime))
+                prevTime = time.time()
+                ROOT.update()
+                #paramGraph.putData(float(parsedData), param)
+                paramGraph.drawGraph()
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
                 newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, UPDATE_FREQ, parameterList, sheet, ))

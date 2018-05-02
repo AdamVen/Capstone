@@ -15,21 +15,24 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import *
 
+# Define x limit
+xLim = 50
+
 
 class ParameterGraph(tk.Frame):
 
     def __init__(self, curRange, distRange, angRange, accRange):
         tk.Frame.__init__(self)
 
-        self.curDataGood = []
-        self.distDataGood = []
-        self.angDataGood = []
-        self.accDataGood = []
+        self.curDataGood = [None] * xLim
+        self.distDataGood = [None]  * xLim
+        self.angDataGood = [None]  * xLim
+        self.accDataGood = [None]  * xLim
 
-        self.curDataBad = []
-        self.distDataBad = []
-        self.angDataBad = []
-        self.accDataBad = []
+        self.curDataBad = [None]  * xLim
+        self.distDataBad = [None]  * xLim
+        self.angDataBad = [None]  * xLim
+        self.accDataBad = [None]  * xLim
 
         self.curRange = curRange
         self.distRange = distRange
@@ -65,7 +68,7 @@ class ParameterGraph(tk.Frame):
 
         tk.Frame.pack(self)
 
-    def addValue(self, data, param):
+    def putData(self, data, param):
         if param == 0:
             if self.curRange[0] < data < self.curRange[1]:
                 self.curDataGood.append(data)
@@ -73,6 +76,10 @@ class ParameterGraph(tk.Frame):
             else:
                 self.curDataGood.append(None)
                 self.curDataBad.append(data)
+
+            self.curDataGood.pop(0)
+            self.curDataBad.pop(0)
+
         elif param == 1:
             if self.distRange[0] < data < self.distRange[1]:
                 self.distDataGood.append(data)
@@ -80,13 +87,22 @@ class ParameterGraph(tk.Frame):
             else:
                 self.distDataGood.append(None)
                 self.distDataBad.append(data)
+
+            self.distDataGood.pop(0)
+            self.distDataBad.pop(0)
+
+
         elif param == 2:
-            if self.angRange[0] < data < self.distRange[1]:
+            if self.angRange[0] < data < self.angRange[1]:
                 self.angDataGood.append(data)
                 self.angDataBad.append(None)
             else:
                 self.angDataGood.append(None)
                 self.angDataBad.append(data)
+            self.angDataGood.pop(0)
+            self.angDataBad.pop(0)
+            print(self.angDataGood)
+            print(self.angDataBad)
         else:
             if self.accRange[0] < data < self.accRange[1]:
                 self.accDataGood.append(data)
@@ -94,29 +110,12 @@ class ParameterGraph(tk.Frame):
             else:
                 self.accDataGood.append(None)
                 self.accDataBad.append(data)
+            self.accDataGood.pop(0)
+            self.accDataBad.pop(0)
 
-        self.checkSize(param)
-        self.drawGraph(param)
+        self.updateGraph(param)
 
-    def checkSize(self, param):
-        if param == 0:
-            if len(self.curDataGood) > 50:
-                self.curDataGood.pop(0)
-                self.curDataBad.pop(0)
-        elif param == 1:
-            if len(self.distDataGood) > 50:
-                self.distDataGood.pop(0)
-                self.distDataBad.pop(0)
-        elif param == 2:
-            if len(self.angDataGood) > 50:
-                self.angDataGood.pop(0)
-                self.angDataBad.pop(0)
-        else:
-            if len(self.accDataGood) > 50:
-                self.accDataGood.pop(0)
-                self.accDataBad.pop(0)
-
-    def drawGraph(self, param):
+    def updateGraph(self, param):
         if param == 0:
             subplot = self.a
             subplot.clear()
@@ -146,5 +145,9 @@ class ParameterGraph(tk.Frame):
             subplot.axis('off')
             subplot.set_title("Acceleration")
 
-        self.canvas.draw()
-        tk.Frame.pack(self)
+    def drawGraph(self):
+        try:
+            self.canvas.draw()
+            tk.Frame.pack(self)
+        except:
+            print("Graph Render Error")
