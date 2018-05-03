@@ -193,31 +193,30 @@ fig = Figure(figsize = (12, 7), dpi = 100)
 a = fig.add_subplot(221)
 lineA = a.plot(curDataGood, 'k', linewidth = 3)
 lineB = a.plot(curDataBad, 'r', linewidth = 3.2)
-a.axis('off')
+#a.axis('off')
 a.set_title("Current")
 
 b = fig.add_subplot(222)
 b.plot([])
-b.axis('off')
+#b.axis('off')
 b.set_title("Distance")
 
 c = fig.add_subplot(223)
 c.plot([])
-c.axis('off')
+#c.axis('off')
 c.set_title("Angle")
 
 d = fig.add_subplot(224)
 d.plot([])
-d.axis('off')
+#d.axis('off')
 d.set_title("Acceleration")
 
-canvas = FigureCanvasTkAgg(fig)
+canvas = FigureCanvasTkAgg(fig, master=ROOT)
+canvas.show()
 canvas.get_tk_widget().pack(side=BOTTOM, fill=BOTH, expand=True)
 canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
-canvas.show()
 
 Frame.pack(f)
-
 
 def animate(i):
     a.clear()
@@ -228,42 +227,43 @@ def animate(i):
 def putData(data, param):
     if param == 0:
         if curRange[0] < data < curRange[1]:
-            curDataGood.append(data)
-            curDataBad.append(None)
+            curDataGood.appendleft(data)
+            curDataBad.appendleft(None)
         else:
-            curDataGood.append(None)
-            curDataBad.append(data)
+            curDataGood.appendleft(None)
+            curDataBad.appendleft(data)
 
         curDataGood.pop()
         curDataBad.pop()
 
+
     elif param == 1:
         if distRange[0] < data < distRange[1]:
-            distDataGood.append(data)
-            distDataBad.append(None)
+            distDataGood.appendleft(data)
+            distDataBad.appendleft(None)
         else:
-            distDataGood.append(None)
-            distDataBad.append(data)
+            distDataGood.appendleft(None)
+            distDataBad.appendleft(data)
 
         distDataGood.pop()
         distDataBad.pop()
 
     elif param == 2:
         if angRange[0] < data < angRange[1]:
-            angDataGood.append(data)
-            angDataBad.append(None)
+            angDataGood.appendleft(data)
+            angDataBad.appendleft(None)
         else:
-            angDataGood.append(None)
-            angDataBad.append(data)
+            angDataGood.appendleft(None)
+            angDataBad.appendleft(data)
         angDataGood.pop()
         angDataBad.pop()
     elif param == 3:
         if accRange[0] < data < accRange[1]:
-            accDataGood.append(data)
-            accDataBad.append(None)
+            accDataGood.appendleft(data)
+            accDataBad.appendleft(None)
         else:
-            accDataGood.append(None)
-            accDataBad.append(data)
+            accDataGood.appendleft(None)
+            accDataBad.appendleft(data)
         accDataGood.pop()
         accDataBad.pop()
 
@@ -384,8 +384,9 @@ with picamera.PiCamera() as camera:
                 #newGUIThread.start()
                 print(str(time.time() - prevTime))
                 prevTime = time.time()
-                paramGraph.putData(float(parsedData), param)
-                paramGraph.drawGraph()
+                putData(float(parsedData), param)
+                #paramGraph.drawGraph()
+                #f.pack()
                 ROOT.update()
 
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
