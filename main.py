@@ -19,7 +19,7 @@ import openpyxl
 from DualOutput import DualOutput
 from ParameterGraph import ParameterGraph
 from SheetsThread import SheetsThread
-from GUIThread import GUIThread
+#from GUIThread import GUIThread
 
 # Google Project Api Imports
 import gspread
@@ -39,15 +39,25 @@ import datetime
 import io
 
 # For GUI
-import tkinter as tk
+#import tkinter as tk
 from tkinter import ttk
 from tkinter import *
 
 # For embedding graphs into GUI
+import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
+import matplotlib.animation as animation
+from matplotlib import style
+style.use('ggplot')
+
+# For speed improvements
+from collections import deque
+
+# Define x limit
+xLim = 50
 
 # Create client to interact with Google Drive Api
 scope = ['https://spreadsheets.google.com/feeds']
@@ -145,6 +155,21 @@ angleFrame = Frame(ROOT)
 ROOT.attributes("-fullscreen", True)
 displayMode = 2
 
+curDataGood = deque([None] * xLim, maxlen = xLim)
+distDataGood = deque([None] * xLim, maxlen = xLim)
+angDataGood = deque([None] * xLim, maxlen = xLim)
+accDataGood = deque([None] * xLim, maxlen = xLim)
+
+curDataBad = deque([None] * xLim, maxlen = xLim)
+distDataBad = deque([None] * xLim, maxlen = xLim)
+angDataBad = deque([None] * xLim, maxlen = xLim)
+accDataBad = deque([None] * xLim, maxlen = xLim)
+
+curRange = [198, 202]
+distRange = [10, 12]
+angRange = [85, 95]
+accRange = [-0.2, 0.2]
+
 f = Frame(ROOT)
 var = StringVar()
 var.set("test")
@@ -152,7 +177,6 @@ LABEL = Label(f, textvariable = var)
 
 # Instantiate graph glasses
 paramGraph = ParameterGraph([198, 202], [10, 12], [85, 95], [-0.2, 0.2])
-ROOT.update()
 import random
 
 #while (1):
@@ -164,6 +188,84 @@ import random
 #        index = 0
 #    ROOT.update()
 
+fig = Figure(figsize = (12, 7), dpi = 100)
+
+a = fig.add_subplot(221)
+lineA = a.plot(curDataGood, 'k', linewidth = 3)
+lineB = a.plot(curDataBad, 'r', linewidth = 3.2)
+a.axis('off')
+a.set_title("Current")
+
+b = fig.add_subplot(222)
+b.plot([])
+b.axis('off')
+b.set_title("Distance")
+
+c = fig.add_subplot(223)
+c.plot([])
+c.axis('off')
+c.set_title("Angle")
+
+d = fig.add_subplot(224)
+d.plot([])
+d.axis('off')
+d.set_title("Acceleration")
+
+canvas = FigureCanvasTkAgg(fig)
+canvas.get_tk_widget().pack(side=BOTTOM, fill=BOTH, expand=True)
+canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
+canvas.show()
+
+Frame.pack(f)
+
+
+def animate(i):
+    a.clear()
+    a.plot(curDataGood, 'k', linewidth = 3)
+    a.plot(curDataBad, 'r', linewidth=3.2)
+
+
+def putData(data, param):
+    if param == 0:
+        if curRange[0] < data < curRange[1]:
+            curDataGood.append(data)
+            curDataBad.append(None)
+        else:
+            curDataGood.append(None)
+            curDataBad.append(data)
+
+        curDataGood.pop()
+        curDataBad.pop()
+
+    elif param == 1:
+        if distRange[0] < data < distRange[1]:
+            distDataGood.append(data)
+            distDataBad.append(None)
+        else:
+            distDataGood.append(None)
+            distDataBad.append(data)
+
+        distDataGood.pop()
+        distDataBad.pop()
+
+    elif param == 2:
+        if angRange[0] < data < angRange[1]:
+            angDataGood.append(data)
+            angDataBad.append(None)
+        else:
+            angDataGood.append(None)
+            angDataBad.append(data)
+        angDataGood.pop()
+        angDataBad.pop()
+    elif param == 3:
+        if accRange[0] < data < accRange[1]:
+            accDataGood.append(data)
+            accDataBad.append(None)
+        else:
+            accDataGood.append(None)
+            accDataBad.append(data)
+        accDataGood.pop()
+        accDataBad.pop()
 
 def updateFrame():
     LABEL.config(font=("Courier", 55))
@@ -218,6 +320,9 @@ with picamera.PiCamera() as camera:
 
         prevTime = time.time()
 
+        ani = animation.FuncAnimation(fig, animate, interval=1000)
+        plt.show()
+
         while time.time() < timeout:
             data = str(ser.readline())
 
@@ -228,7 +333,17 @@ with picamera.PiCamera() as camera:
                 rawData = ""
                 print('Serial Read Error')
 
-            if "angLR" in rawData:
+            if "C" in rawData:
+                param = 0
+                measurementValue = 200 + random.uniform(-3, 3)
+                current.append(round(float(measurementValue), 3))
+
+            elif "D" in rawData:
+                param = 1
+                measurementValue = 11 + random.uniform(-2, 2)
+                distance.append(measurementValue)
+
+            elif "angLR" in rawData:
                 angle.append(measurementValue)
                 param = 2
                 if float(angle[-1]) > 75:
@@ -237,36 +352,19 @@ with picamera.PiCamera() as camera:
                     i = 2
                 else:
                     i = 1
-            else:
-                angle.append(angle[-1])
 
-            if "D" in rawData:
-                param = 1
-                measurementValue = 11 + random.uniform(-2, 2)
-                distance.append(measurementValue)
-            else:
-                distance.append(distance[-1])
-
-            if "accLR" in rawData:
+            elif "accLR" in rawData:
                 accLR.append(round(float(measurementValue), 3))
                 param = 3
-            else:
-                accLR.append(accLR[-1])
 
-            if "accFB" in rawData:
+            elif "accFB" in rawData:
                 accFB.append(round(float(measurementValue), 3))
-            else:
-                accFB.append(accFB[-1])
+                param = 4
 
-            if "C" in rawData:
-                param = 0
-                measurementValue = 200 + random.uniform(-3, 3)
-                current.append(round(float(measurementValue), 3))
-            else:
-                current.append(current[-1])
+            elif "angFB" in rawData:
+                param = 4
 
             parsedData = measurementValue
-            print(str(rawData) + str(parsedData))
 
             index = index + 1
             timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
@@ -281,15 +379,15 @@ with picamera.PiCamera() as camera:
             if displayMode == 1:
                 var.set(outStr)
                 updateFrame()
-
-            if displayMode == 2:
-                newGUIThread = threading.Thread(target=GUIThread, args=(parsedData, param, paramGraph))
-                newGUIThread.start()
+            elif displayMode == 2:
+                #newGUIThread = threading.Thread(target=GUIThread, args=(parsedData, param, paramGraph))
+                #newGUIThread.start()
                 print(str(time.time() - prevTime))
                 prevTime = time.time()
-                ROOT.update()
-                #paramGraph.putData(float(parsedData), param)
+                paramGraph.putData(float(parsedData), param)
                 paramGraph.drawGraph()
+                ROOT.update()
+
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
                 newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, UPDATE_FREQ, parameterList, sheet, ))
