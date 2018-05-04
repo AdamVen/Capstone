@@ -16,8 +16,9 @@ def SheetsThread(indexOffset, UPDATE_FREQ, parameterList, sheet):
             cellIndex = 0
 
             for cell in cell_list:
-                cell.value = parameterList[paramIndex][cellIndex]
-                cellIndex = cellIndex + 1
+                    cell.value = parameterList[paramIndex][cellIndex]
+                    cellIndex = cellIndex + 1
+
 
             sheet.update_cells(cell_list)
 

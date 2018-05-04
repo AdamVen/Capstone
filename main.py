@@ -35,6 +35,7 @@ import datetime
 
 # Data simulation
 import random
+import math
 
 # GUI
 #import tkinter as tk
@@ -73,7 +74,7 @@ CONST_START_ROW = 5
 CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
-UPDATE_FREQ = 50
+UPDATE_FREQ = 150
 BAUD_RATE = 57600
 SESSION_LENGTH = 90 # In seconds
 
@@ -166,13 +167,13 @@ LABEL = Label(f, textvariable = var)
 
 def animate(i):
     lineCurGood.set_data(range(len(curDataGood)), curDataGood)
-    lineCurBad.set_data(range(len(curDataGood)), curDataBad)
-    lineDistGood.set_data(range(len(curDataGood)), distDataGood)
-    lineDistBad.set_data(range(len(curDataGood)), distDataBad)
-    lineAngGood.set_data(range(len(curDataGood)), angDataGood)
-    lineAngBad.set_data(range(len(curDataGood)), angDataBad)
-    lineAccGood.set_data(range(len(curDataGood)), accDataGood)
-    lineAccBad.set_data(range(len(curDataGood)), accDataBad)
+    lineCurBad.set_data(range(len(curDataBad)), curDataBad)
+    lineDistGood.set_data(range(len(distDataGood)), distDataGood)
+    lineDistBad.set_data(range(len(distDataBad)), distDataBad)
+    lineAngGood.set_data(range(len(angDataGood)), angDataGood)
+    lineAngBad.set_data(range(len(angDataBad)), angDataBad)
+    lineAccGood.set_data(range(len(accDataGood)), accDataGood)
+    lineAccBad.set_data(range(len(accDataBad)), accDataBad)
     return lineCurGood, lineCurBad, lineDistGood, lineDistBad,\
            lineAngGood, lineAngBad, lineAccGood, lineAccBad
 
@@ -182,46 +183,44 @@ def animateinit():
 
 def putData(data, param):
     if param == 0:
-        if curRange[0] < data < curRange[1]:
-            curDataGood.append(data)
-            curDataBad.append(None)
-        else:
-            curDataGood.append(None)
-            curDataBad.append(data)
-
+        curDataGood.append(data)
         curDataGood.popleft()
-        curDataBad.popleft()
+        if curRange[0] < data < curRange[1]:
+            curDataBad.append(None)
+            curDataBad.popleft()
+        else:
+            curDataBad.append(data)
+            curDataBad.popleft()
 
     elif param == 1:
-        if distRange[0] < data < distRange[1]:
-            distDataGood.append(data)
-            distDataBad.append(None)
-        else:
-            distDataGood.append(None)
-            distDataBad.append(data)
-
+        distDataGood.append(data)
         distDataGood.popleft()
-        distDataBad.popleft()
+        if distRange[0] < data < distRange[1]:
+            distDataBad.append(None)
+            distDataBad.popleft()
+        else:
+            distDataBad.append(data)
+            distDataBad.popleft()
 
     elif param == 2:
-        if angRange[0] < data < angRange[1]:
-            angDataGood.append(data)
-            angDataBad.append(None)
-        else:
-            angDataGood.append(None)
-            angDataBad.append(data)
+        angDataGood.append(data)
         angDataGood.popleft()
-        angDataBad.popleft()
+        if angRange[0] < data < angRange[1]:
+            angDataBad.append(None)
+            angDataBad.popleft()
+        else:
+            angDataBad.append(data)
+            angDataBad.popleft()
 
     elif param == 3:
-        if accRange[0] < data < accRange[1]:
-            accDataGood.append(data)
-            accDataBad.append(None)
-        else:
-            accDataGood.append(None)
-            accDataBad.append(data)
+        accDataGood.append(data)
         accDataGood.popleft()
-        accDataBad.popleft()
+        if accRange[0] < data < accRange[1]:
+            accDataBad.append(None)
+            accDataBad.popleft()
+        else:
+            accDataBad.append(data)
+            accDataBad.popleft()
 
 def updateFrame():
     LABEL.config(font=("Courier", 55))
@@ -291,7 +290,7 @@ def RunThread():
 
                 if "C" in rawData:
                     param = 0
-                    measurementValue = 200 + random.uniform(-3, 3)
+                    measurementValue = 200 + (5 * math.sin(index))
                     current.append(round(float(measurementValue), 3))
 
                 elif "D" in rawData:
@@ -371,11 +370,11 @@ distPlot.set_xlim([0, xLim])
 angPlot.set_xlim([0, xLim])
 accPlot.set_xlim([0, xLim])
 
-curPlot.set_ylim(curRange)
-distPlot.set_ylim(distRange)
-angPlot.set_ylim(angRange)
-accPlot.set_ylim(accRange)
-#curPlot.plot(curDataGood, 'k', linewidth = 3)
+curPlot.set_ylim([190, 210])
+distPlot.set_ylim([0, 15])
+angPlot.set_ylim([0, 360])
+accPlot.set_ylim([-1, 1])
+
 lineCurGood, = curPlot.plot([0], [0], color = 'black')
 lineCurBad, = curPlot.plot([0], [0],color = 'red')
 lineDistGood, = distPlot.plot([0], [0],color = 'black')
