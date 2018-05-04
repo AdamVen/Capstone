@@ -2,6 +2,7 @@
 # Description: This class allows for a graph to be made and updated in real-time
 
 # For embedding graphs into GUI
+import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
@@ -15,24 +16,30 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import *
 
+# For speed improvements
+from collections import deque
+
 # Define x limit
 xLim = 50
 
-
 class ParameterGraph(tk.Frame):
+
+    def run(self, *args):
+        self.lineA.set_data(self.curDataGood)
+        self.lineB.set_data(self.curDataBad)
 
     def __init__(self, curRange, distRange, angRange, accRange):
         tk.Frame.__init__(self)
 
-        self.curDataGood = [None] * xLim
-        self.distDataGood = [None]  * xLim
-        self.angDataGood = [None]  * xLim
-        self.accDataGood = [None]  * xLim
+        self.curDataGood = deque([None] * xLim, maxlen = xLim)
+        self.distDataGood = deque([None] * xLim, maxlen = xLim)
+        self.angDataGood = deque([None] * xLim, maxlen = xLim)
+        self.accDataGood = deque([None] * xLim, maxlen = xLim)
 
-        self.curDataBad = [None]  * xLim
-        self.distDataBad = [None]  * xLim
-        self.angDataBad = [None]  * xLim
-        self.accDataBad = [None]  * xLim
+        self.curDataBad = deque([None] * xLim, maxlen = xLim)
+        self.distDataBad = deque([None] * xLim, maxlen = xLim)
+        self.angDataBad = deque([None] * xLim, maxlen = xLim)
+        self.accDataBad = deque([None] * xLim, maxlen = xLim)
 
         self.curRange = curRange
         self.distRange = distRange
@@ -42,7 +49,9 @@ class ParameterGraph(tk.Frame):
         self.f = Figure(figsize = (12, 7), dpi = 100)
 
         self.a = self.f.add_subplot(221)
-        self.a.plot([])
+        #self.a.plot([])
+        self.lineA = self.a.plot(self.curDataGood, 'k', linewidth = 3)
+        self.lineB = self.a.plot(self.curDataBad, 'r', linewidth = 3.2)
         self.a.axis('off')
         self.a.set_title("Current")
 
@@ -68,6 +77,9 @@ class ParameterGraph(tk.Frame):
 
         tk.Frame.pack(self)
 
+        ani = animation.FuncAnimation(self.f, self.run, interval = 1)
+        plt.show()
+
     def putData(self, data, param):
         if param == 0:
             if self.curRange[0] < data < self.curRange[1]:
@@ -77,8 +89,8 @@ class ParameterGraph(tk.Frame):
                 self.curDataGood.append(None)
                 self.curDataBad.append(data)
 
-            self.curDataGood.pop(0)
-            self.curDataBad.pop(0)
+            self.curDataGood.pop()
+            self.curDataBad.pop()
 
         elif param == 1:
             if self.distRange[0] < data < self.distRange[1]:
@@ -88,9 +100,8 @@ class ParameterGraph(tk.Frame):
                 self.distDataGood.append(None)
                 self.distDataBad.append(data)
 
-            self.distDataGood.pop(0)
-            self.distDataBad.pop(0)
-
+            self.distDataGood.pop()
+            self.distDataBad.pop()
 
         elif param == 2:
             if self.angRange[0] < data < self.angRange[1]:
@@ -99,30 +110,29 @@ class ParameterGraph(tk.Frame):
             else:
                 self.angDataGood.append(None)
                 self.angDataBad.append(data)
-            self.angDataGood.pop(0)
-            self.angDataBad.pop(0)
-            print(self.angDataGood)
-            print(self.angDataBad)
-        else:
+            self.angDataGood.pop()
+            self.angDataBad.pop()
+        elif param == 3:
             if self.accRange[0] < data < self.accRange[1]:
                 self.accDataGood.append(data)
                 self.accDataBad.append(None)
             else:
                 self.accDataGood.append(None)
                 self.accDataBad.append(data)
-            self.accDataGood.pop(0)
-            self.accDataBad.pop(0)
+            self.accDataGood.pop()
+            self.accDataBad.pop()
 
-        self.updateGraph(param)
+        #self.updateGraph(param)
 
     def updateGraph(self, param):
         if param == 0:
-            subplot = self.a
-            subplot.clear()
-            subplot.plot(self.curDataGood, 'k', linewidth = 3)
-            subplot.plot(self.curDataBad, 'r', linewidth = 3.2)
-            subplot.axis('off')
-            subplot.set_title("Current")
+            param = 0
+            #subplot = self.a
+            #subplot.clear()
+            #subplot.plot(self.curDataGood, 'k', linewidth = 3)
+            #subplot.plot(self.curDataBad, 'r', linewidth = 3.2)
+            #subplot.axis('off')
+            #subplot.set_title("Current")
         elif param == 1:
             subplot = self.b
             subplot.clear()
@@ -132,6 +142,7 @@ class ParameterGraph(tk.Frame):
             subplot.set_title("Distance")
         elif param == 2:
             subplot = self.c
+            subplot.set_ylim(0, 360)
             subplot.clear()
             subplot.plot(self.angDataGood, 'k', linewidth = 3)
             subplot.plot(self.angDataBad, 'r', linewidth = 3.2)

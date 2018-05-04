@@ -19,7 +19,7 @@ import openpyxl
 from DualOutput import DualOutput
 from ParameterGraph import ParameterGraph
 from SheetsThread import SheetsThread
-from GUIThread import GUIThread
+#from GUIThread import GUIThread
 
 # Google Project Api Imports
 import gspread
@@ -32,22 +32,94 @@ import threading
 import serial
 import time
 
-# For time stamping data
+# Time stamping
 import datetime
 
-# For writing video
-import io
-
-# For GUI
-import tkinter as tk
+# GUI
+#import tkinter as tk
 from tkinter import ttk
 from tkinter import *
 
-# For embedding graphs into GUI
+# Graphing
+import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+import matplotlib.animation as animation
+
+# For speed improvements
+from collections import deque
+
+def animate(i):
+    lineCurGood.set_data(range(len(curDataGood)), curDataGood)
+    lineCurBad.set_data(range(len(curDataGood)), curDataBad)
+    lineDistGood.set_data(range(len(curDataGood)), distDataGood)
+    lineDistBad.set_data(range(len(curDataGood)), distDataBad)
+    lineAngGood.set_data(range(len(curDataGood)), angDataGood)
+    lineAngBad.set_data(range(len(curDataGood)), angDataBad)
+    lineAccGood.set_data(range(len(curDataGood)), accDataGood)
+    lineAccBad.set_data(range(len(curDataGood)), accDataBad)
+    return lineCurGood, lineCurBad, lineDistGood, lineDistBad,\
+           lineAngGood, lineAngBad, lineAccGood, lineAccBad
+
+def animateinit():
+    return lineCurGood, lineCurBad, lineDistGood, lineDistBad,\
+           lineAngGood, lineAngBad, lineAccGood, lineAccBad
+
+def putData(data, param):
+    if param == 0:
+        if curRange[0] < data < curRange[1]:
+            curDataGood.append(data)
+            curDataBad.append(None)
+        else:
+            curDataGood.append(None)
+            curDataBad.append(data)
+
+        curDataGood.popleft()
+        curDataBad.popleft()
+
+    elif param == 1:
+        if distRange[0] < data < distRange[1]:
+            distDataGood.append(data)
+            distDataBad.append(None)
+        else:
+            distDataGood.append(None)
+            distDataBad.append(data)
+
+        distDataGood.popleft()
+        distDataBad.popleft()
+        print(distDataGood)
+
+    elif param == 2:
+        if angRange[0] < data < angRange[1]:
+            angDataGood.append(data)
+            angDataBad.append(None)
+        else:
+            angDataGood.append(None)
+            angDataBad.append(data)
+        angDataGood.popleft()
+        angDataBad.popleft()
+
+    elif param == 3:
+        if accRange[0] < data < accRange[1]:
+            accDataGood.append(data)
+            accDataBad.append(None)
+        else:
+            accDataGood.append(None)
+            accDataBad.append(data)
+        accDataGood.popleft()
+        accDataBad.popleft()
+
+def updateFrame():
+    LABEL.config(font=("Courier", 55))
+    LABEL.pack()
+    f.pack()
+    ROOT.update()
+
+# Define x limit
+xLim = 50
 
 # Create client to interact with Google Drive Api
 scope = ['https://spreadsheets.google.com/feeds']
@@ -100,17 +172,14 @@ cellIndex = 0
 index = 0
 indexOffset = 0
 
-# Create ID
-id = metal[metalIndex] + transfer[transferIndex] + thickness[thicknessIndex]
-
 # Set-up USB
 ser = serial.Serial('/dev/ttyUSB0', BAUD_RATE)
 
 # Load data from excel sheet
 for r in range(CONST_START_ROW, CONST_END_ROW + 1):
-    for c in range(CONST_START_COLUMN, CONST_END_COLUMN + 1):
-        cellStr = ws.cell(row = r, column = c)
-        weldingParameters[r - CONST_START_ROW][c - CONST_START_COLUMN] = cellStr.value
+    for angPlot in range(CONST_START_COLUMN, CONST_END_COLUMN + 1):
+        cellStr = ws.cell(row = r, column = angPlot)
+        weldingParameters[r - CONST_START_ROW][angPlot - CONST_START_COLUMN] = cellStr.value
 
 # Extract ID Column
 idCol = [item[11] for item in weldingParameters]
@@ -138,38 +207,77 @@ angleLow = [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
 
+# Data plotting variables
+curDataGood = deque([None] * xLim, maxlen = xLim)
+distDataGood = deque([None] * xLim, maxlen = xLim)
+angDataGood = deque([None] * xLim, maxlen = xLim)
+accDataGood = deque([None] * xLim, maxlen = xLim)
+
+curDataBad = deque([None] * xLim, maxlen = xLim)
+distDataBad = deque([None] * xLim, maxlen = xLim)
+angDataBad = deque([None] * xLim, maxlen = xLim)
+accDataBad = deque([None] * xLim, maxlen = xLim)
+
+curRange = [198, 202]
+distRange = [10, 12]
+angRange = [85, 95]
+accRange = [-0.2, 0.2]
+
 # GUI Set-Up
 outStr = ""
 ROOT = Tk()
-angleFrame = Frame(ROOT)
+f = Frame(ROOT)
 ROOT.attributes("-fullscreen", True)
 displayMode = 2
-
-f = Frame(ROOT)
 var = StringVar()
 var.set("test")
 LABEL = Label(f, textvariable = var)
 
-# Instantiate graph glasses
-paramGraph = ParameterGraph([198, 202], [10, 12], [85, 95], [-0.2, 0.2])
-ROOT.update()
-import random
+fig = Figure(figsize = (12, 7), dpi = 100)
 
-#while (1):
-#    x = 200 + (3 * math.sin(index))
-#    paramGraph.addValue(x, 0)
-#    print(x)
-#    index = index + 0.01
-#    if index > 6.28:
-#        index = 0
-#    ROOT.update()
+curPlot = fig.add_subplot(221)
+distPlot = fig.add_subplot(222)
+angPlot = fig.add_subplot(223)
+accPlot = fig.add_subplot(224)
 
+curPlot.set_xlim([0, xLim])
+distPlot.set_xlim([0, xLim])
+angPlot.set_xlim([0, xLim])
+accPlot.set_xlim([0, xLim])
 
-def updateFrame():
-    LABEL.config(font=("Courier", 55))
-    LABEL.pack()
-    f.pack()
-    ROOT.update()
+curPlot.set_ylim(curRange)
+distPlot.set_ylim(distRange)
+angPlot.set_ylim(angRange)
+accPlot.set_ylim(accRange)
+#curPlot.plot(curDataGood, 'k', linewidth = 3)
+lineCurGood, = curPlot.plot([0], [0], color = 'black')
+lineCurBad, = curPlot.plot([0], [0],color = 'red')
+lineDistGood, = distPlot.plot([0], [0],color = 'black')
+lineDistBad, = distPlot.plot([0], [0],color = 'red')
+lineAngGood, = angPlot.plot([0], [0],color = 'black')
+lineAngBad, = angPlot.plot([0], [0],color = 'red')
+lineAccGood, = accPlot.plot([0], [0],color = 'black')
+lineAccBad, = accPlot.plot([0], [0],color = 'red')
+
+curPlot.axis('off')
+curPlot.set_title("Current")
+distPlot.axis('off')
+distPlot.set_title("Distance")
+angPlot.axis('off')
+angPlot.set_title("Angle")
+accPlot.axis('off')
+accPlot.set_title("Acceleration")
+
+canvas = FigureCanvasTkAgg(fig, master=ROOT)
+canvas.get_tk_widget().pack(side=BOTTOM, fill=BOTH, expand=True)
+canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
+
+Frame.pack(f)
+
+ani = animation.FuncAnimation(fig, animate, interval=40, init_func = animateinit, blit = True)
+ROOT.config(cursor="none")
+print('entering main loop')
+ROOT.mainloop()
 
 with picamera.PiCamera() as camera:
     camera.resolution = (1920, 1080)
@@ -213,10 +321,11 @@ with picamera.PiCamera() as camera:
 
         timeout = time.time() + SESSION_LENGTH
 
-        LOOP_ACTIVE = True
-        ROOT.config(cursor="none")
+        #LOOP_ACTIVE = True
+
 
         prevTime = time.time()
+
 
         while time.time() < timeout:
             data = str(ser.readline())
@@ -228,7 +337,17 @@ with picamera.PiCamera() as camera:
                 rawData = ""
                 print('Serial Read Error')
 
-            if "angLR" in rawData:
+            if "C" in rawData:
+                param = 0
+                measurementValue = 200 + random.uniform(-3, 3)
+                current.append(round(float(measurementValue), 3))
+
+            elif "D" in rawData:
+                param = 1
+                measurementValue = 11 + random.uniform(-2, 2)
+                distance.append(measurementValue)
+
+            elif "angLR" in rawData:
                 angle.append(measurementValue)
                 param = 2
                 if float(angle[-1]) > 75:
@@ -237,36 +356,19 @@ with picamera.PiCamera() as camera:
                     i = 2
                 else:
                     i = 1
-            else:
-                angle.append(angle[-1])
 
-            if "D" in rawData:
-                param = 1
-                measurementValue = 11 + random.uniform(-2, 2)
-                distance.append(measurementValue)
-            else:
-                distance.append(distance[-1])
-
-            if "accLR" in rawData:
+            elif "accLR" in rawData:
                 accLR.append(round(float(measurementValue), 3))
                 param = 3
-            else:
-                accLR.append(accLR[-1])
 
-            if "accFB" in rawData:
+            elif "accFB" in rawData:
                 accFB.append(round(float(measurementValue), 3))
-            else:
-                accFB.append(accFB[-1])
+                param = 4
 
-            if "C" in rawData:
-                param = 0
-                measurementValue = 200 + random.uniform(-3, 3)
-                current.append(round(float(measurementValue), 3))
-            else:
-                current.append(current[-1])
+            elif "angFB" in rawData:
+                param = 4
 
             parsedData = measurementValue
-            print(str(rawData) + str(parsedData))
 
             index = index + 1
             timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
@@ -281,15 +383,17 @@ with picamera.PiCamera() as camera:
             if displayMode == 1:
                 var.set(outStr)
                 updateFrame()
-
-            if displayMode == 2:
-                newGUIThread = threading.Thread(target=GUIThread, args=(parsedData, param, paramGraph))
-                newGUIThread.start()
+            elif displayMode == 2:
+                #newGUIThread = threading.Thread(target=GUIThread, args=(parsedData, param, paramGraph))
+                #newGUIThread.start()
                 print(str(time.time() - prevTime))
                 prevTime = time.time()
+                putData(float(parsedData), param)
+                #paramGraph.drawGraph()
+                #f.pack()
                 ROOT.update()
-                #paramGraph.putData(float(parsedData), param)
-                paramGraph.drawGraph()
+                ROOT.update_idletasks()
+
             # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
             if (index % UPDATE_FREQ == 0):
                 newSheetThread = threading.Thread(target = SheetsThread, args = (indexOffset, UPDATE_FREQ, parameterList, sheet, ))
