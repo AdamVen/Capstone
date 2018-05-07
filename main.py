@@ -12,12 +12,10 @@ import socket
 # Excel imports
 import openpyxl
 
-# Audio imports
-import os
-
 # Custom-written module imports
 from DualOutput import DualOutput
 from SheetsThread import SheetsThread
+from SoundThread import SoundThread
 
 # Google Project Api Imports
 import gspread
@@ -50,7 +48,7 @@ import matplotlib.animation as animation
 from collections import deque
 
 # Define x limit
-xLim = 30
+xLim = 25
 
 # Create client to interact with Google Drive Api
 scope = ['https://spreadsheets.google.com/feeds']
@@ -157,7 +155,6 @@ outStr = ""
 ROOT = Tk()
 f = Frame(ROOT)
 ROOT.attributes("-fullscreen", True)
-displayMode = 2
 var = StringVar()
 var.set("test")
 LABEL = Label(f, textvariable = var)
@@ -298,6 +295,8 @@ def RunThread():
                 elif "D" in rawData:
                     param = 1
                     distance.append(measurementValue)
+                    newSoundThread = threading.Thread(target=SoundThread, args=(distRange, measurementValue,))
+                    newSoundThread.start()
 
                 elif "angLR" in rawData:
                     angle.append(measurementValue)
@@ -377,13 +376,13 @@ angPlot.set_ylim([-180, 180])
 accPlot.set_ylim([-1, 1])
 
 lineCurGood, = curPlot.plot([0], [0], color = 'black')
-lineCurBad, = curPlot.plot([0], [0],color = 'red')
-lineDistGood, = distPlot.plot([0], [0],color = 'black')
-lineDistBad, = distPlot.plot([0], [0],color = 'red')
-lineAngGood, = angPlot.plot([0], [0],color = 'black')
-lineAngBad, = angPlot.plot([0], [0],color = 'red')
-lineAccGood, = accPlot.plot([0], [0],color = 'black')
-lineAccBad, = accPlot.plot([0], [0],color = 'red')
+lineCurBad, = curPlot.plot([0], [0], color = 'red')
+lineDistGood, = distPlot.plot([0], [0], color = 'black')
+lineDistBad, = distPlot.plot([0], [0], color = 'red')
+lineAngGood, = angPlot.plot([0], [0], color = 'black')
+lineAngBad, = angPlot.plot([0], [0], color = 'red')
+lineAccGood, = accPlot.plot([0], [0], color = 'black')
+lineAccBad, = accPlot.plot([0], [0], color = 'red')
 
 curPlot.axis('off')
 curPlot.set_title("Current", fontsize = 25)
