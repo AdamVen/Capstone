@@ -1,7 +1,7 @@
 # Author: Adam Vengroff
 # Description: This class allows for video to be both streamed and saved locally
 
-# For writing video
+# Video writing imports
 import io
 
 

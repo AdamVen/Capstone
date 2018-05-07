@@ -4,8 +4,9 @@
 # Multi-threading imports
 import threading
 
-# For coordinating threads
+# For coordinating threads to they run sequentially
 lockThread = threading.Lock()
+
 
 def SheetsThread(indexOffset, UPDATE_FREQ, parameterList, sheet):
     with lockThread:
@@ -15,11 +16,12 @@ def SheetsThread(indexOffset, UPDATE_FREQ, parameterList, sheet):
 
             cellIndex = 0
 
+            # Iterate through every cell and write values
             for cell in cell_list:
                     cell.value = parameterList[paramIndex][cellIndex]
                     cellIndex = cellIndex + 1
 
-
             sheet.update_cells(cell_list)
 
+            # Erase writen values from parameterList
             del parameterList[paramIndex][0:UPDATE_FREQ]

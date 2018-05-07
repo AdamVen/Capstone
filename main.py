@@ -1,19 +1,19 @@
 # Author: Adam Vengroff
-# Description: This software processes serial data
+# Description: This software processes serial data in order to evaluate
+#              welding gun operation, graph data in real-time as well as
+#              as stream/record video
 
 # RPi peripherals imports
 import picamera
 
-# Time/Sleep imports
-from time import sleep
-import datetime as dt
-
 # Networking imports
 import socket
-import subprocess
 
 # Excel imports
 import openpyxl
+
+# Audio imports
+import os
 
 # Custom-written module imports
 from DualOutput import DualOutput
@@ -34,19 +34,14 @@ import time
 import datetime
 
 # Data simulation
-import random
 import math
 
 # GUI
-#import tkinter as tk
-from tkinter import ttk
 from tkinter import *
 
 # Graphing
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import matplotlib.animation as animation
@@ -55,7 +50,7 @@ import matplotlib.animation as animation
 from collections import deque
 
 # Define x limit
-xLim = 50
+xLim = 30
 
 # Create client to interact with Google Drive Api
 scope = ['https://spreadsheets.google.com/feeds']
@@ -69,14 +64,16 @@ sheet = client.open("WeldingReadIn").sheet1
 wb = openpyxl.load_workbook('/home/pi/Downloads/WeldingParameters.xlsx')
 ws = wb["MIG"]
 
-# Constants
+# Constants definite excel sheet size
 CONST_START_ROW = 5
 CONST_END_ROW = 48
 CONST_START_COLUMN = 4
 CONST_END_COLUMN = 15
-UPDATE_FREQ = 150
-BAUD_RATE = 57600
-SESSION_LENGTH = 90 # In seconds
+
+# Constants
+UPDATE_FREQ = 150 # How many iterations before writing to Google Sheets
+BAUD_RATE = 57600 # Communication speed with Arduino
+SESSION_LENGTH = 3600 # How many seconds to stream video
 
 # Create 2D Array to hold parameter data
 w = CONST_END_ROW - CONST_START_ROW + 1
@@ -87,10 +84,8 @@ weldingParameters = [['-1' for x in range(w)] for y in range(h)] # weldingParame
 distance = [0]
 current = [0]
 angle = [0]
-acceleration = [['-1' for x in range(3)] for y in range(2)] # [X1 Y1 Z1; X2 Y2 Z2]
 accFB = [0]
 accLR = [0]
-currentDispV =  0
 timestamp = []
 parameterList = []
 parameterList.extend((angle, distance, accFB, accLR, current, timestamp))
@@ -99,11 +94,15 @@ parameterList.extend((angle, distance, accFB, accLR, current, timestamp))
 metal = ['0', '1']
 transfer = ['0', '1']
 thickness = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10']
+
+# Welding settings
 metalIndex = int(sheet.cell(3, 3).value)
 transferIndex = int(sheet.cell(4, 3).value)
 thicknessIndex = int(sheet.cell(5, 3).value)
+displayMode = int(sheet.cell(6, 3).value)
+audioIndicator = int(sheet.cell(7, 3).value)
 
-# Set-up USB
+# USB set-up
 ser = serial.Serial('/dev/ttyUSB0', BAUD_RATE)
 
 # Load data from excel sheet
@@ -131,9 +130,7 @@ thinWFS = weldingParameters[tableIndex][8]
 thickWireSize = weldingParameters[tableIndex][9]
 thickWFS = weldingParameters[tableIndex][10]
 
-# Additional welding parameter information
-distLow = 6.35
-distHigh = 12.7
+# Angle ranges for different welding types
 angleLow = [75, 40, 60]
 angleHigh = [105, 50, 70]
 angleType = ['Butt Weld', 'T-Joint', 'Lap Joint']
@@ -149,6 +146,7 @@ distDataBad = deque([None] * xLim, maxlen = xLim)
 angDataBad = deque([None] * xLim, maxlen = xLim)
 accDataBad = deque([None] * xLim, maxlen = xLim)
 
+# Parameter range set-up
 curRange = [198, 202]
 distRange = [10, 12]
 angRange = [85, 95]
@@ -164,7 +162,7 @@ var = StringVar()
 var.set("test")
 LABEL = Label(f, textvariable = var)
 
-
+# Graph animation
 def animate(i):
     lineCurGood.set_data(range(len(curDataGood)), curDataGood)
     lineCurBad.set_data(range(len(curDataBad)), curDataBad)
@@ -177,10 +175,15 @@ def animate(i):
     return lineCurGood, lineCurBad, lineDistGood, lineDistBad,\
            lineAngGood, lineAngBad, lineAccGood, lineAccBad
 
+# For using blit to improve efficiency by only re-drawing
+# these items during the animation
 def animateinit():
     return lineCurGood, lineCurBad, lineDistGood, lineDistBad,\
            lineAngGood, lineAngBad, lineAccGood, lineAccBad
 
+# Adds data to end of appropriate data array using parameter type
+# and determining of data point is within target range, removes old data
+# from start of the array to maintain constant array size
 def putData(data, param):
     if param == 0:
         curDataGood.append(data)
@@ -222,12 +225,16 @@ def putData(data, param):
             accDataBad.append(data)
             accDataBad.popleft()
 
+
+# Push update to frame
 def updateFrame():
     LABEL.config(font=("Courier", 55))
     LABEL.pack()
     f.pack()
     ROOT.update()
 
+# RunThread is responsible for video recording/streaming as well as recieving
+# data from Arduino and analyzing it
 def RunThread():
     with picamera.PiCamera() as camera:
         camera.resolution = (1920, 1080)
@@ -236,8 +243,6 @@ def RunThread():
         camera.annotate_text_size = 16
         i = 0
         param = 0
-
-        currentTime = time.time()
 
         streamFlag = int(sheet.cell(6, 3).value)
 
@@ -271,10 +276,7 @@ def RunThread():
 
             timeout = time.time() + SESSION_LENGTH
 
-            prevTime = time.time()
-
-            # For iterating through Google Sheets cells
-            cellIndex = 0
+            # track number of iterations
             index = 0
             indexOffset = 0
 
@@ -295,7 +297,6 @@ def RunThread():
 
                 elif "D" in rawData:
                     param = 1
-                    measurementValue = 11 + random.uniform(-2, 2)
                     distance.append(measurementValue)
 
                 elif "angLR" in rawData:
@@ -325,7 +326,7 @@ def RunThread():
                 timestamp.append(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 
                 currentStr = 'Current: ' + str(currentLow) + ' < ' + str(current[-1])[:3] + ' < ' + str(currentHigh) + '\n'
-                distanceStr = 'Distance: ' + str(distLow) + ' < ' + str(distance[-1])[:5] + ' < ' + str(distHigh) + '\n'
+                distanceStr = 'Distance: ' + str(distRange[0]) + ' < ' + str(distance[-1])[:5] + ' < ' + str(distRange[1]) + '\n'
                 angleStr = 'Angle (' + str(angleType[i]) + '): ' + str(angleLow[i]) + ' < ' + str(angle[-1])[:3] + ' < ' + str(angleHigh[i]) + '\n'
                 accStr = 'LR Acc: ' + str(accLR[-1])[:3] + ' FB Acc: ' + str(accFB[-1])[:3]
                 outStr = currentStr + distanceStr + angleStr + accStr
@@ -335,7 +336,6 @@ def RunThread():
                     var.set(outStr)
                     updateFrame()
                 elif displayMode == 2:
-                    prevTime = time.time()
                     putData(float(parsedData), param)
 
                 # Call thread to write to Google sheets and update GUI every UPDATE_FREQ samples
@@ -358,6 +358,7 @@ def RunThread():
         f.destroy()
         ROOT.destroy()
 
+# Real-time graph set-up
 fig = Figure(figsize = (12, 7), dpi = 100)
 
 curPlot = fig.add_subplot(221)
@@ -370,9 +371,9 @@ distPlot.set_xlim([0, xLim])
 angPlot.set_xlim([0, xLim])
 accPlot.set_xlim([0, xLim])
 
-curPlot.set_ylim([190, 210])
+curPlot.set_ylim([-220, 220])
 distPlot.set_ylim([0, 15])
-angPlot.set_ylim([0, 360])
+angPlot.set_ylim([-180, 180])
 accPlot.set_ylim([-1, 1])
 
 lineCurGood, = curPlot.plot([0], [0], color = 'black')
@@ -385,14 +386,15 @@ lineAccGood, = accPlot.plot([0], [0],color = 'black')
 lineAccBad, = accPlot.plot([0], [0],color = 'red')
 
 curPlot.axis('off')
-curPlot.set_title("Current")
+curPlot.set_title("Current", fontsize = 25)
 distPlot.axis('off')
-distPlot.set_title("Distance")
+distPlot.set_title("Distance", fontsize = 25)
 angPlot.axis('off')
-angPlot.set_title("Angle")
+angPlot.set_title("Angle", fontsize = 25)
 accPlot.axis('off')
-accPlot.set_title("Acceleration")
+accPlot.set_title("Acceleration", fontsize = 25)
 
+# GUI set-up
 canvas = FigureCanvasTkAgg(fig, master=ROOT)
 canvas.get_tk_widget().pack(side=BOTTOM, fill=BOTH, expand=True)
 canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
